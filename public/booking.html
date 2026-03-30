@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Agendar - WebBooking</title>
+    <link rel="stylesheet" href="css/style.css">
+    <!-- PDF.js para renderizar logos PDF como imagem -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+</head>
+
+<body>
+    <script>
+        // Aplica o tema salvo (sem precisar carregar o theme.js inteiro)
+        if (localStorage.getItem('theme') === 'light') {
+            document.body.classList.add('light');
+        }
+    </script>
+
+    <div class="profile-section">
+        <div class="profile-header" style="flex-direction: column; align-items: center; text-align: center; gap: 20px; padding: 20px 0;">
+            <div id="avatarContainer"
+                style="width: 180px; height: 180px; border-radius: 50%; overflow: hidden; background-color: #292828; flex-shrink: 0;">
+                <img id="avatarImg" class="avatar" src="css/img/sua-foto.png" alt="Avatar"
+                    style="width: 100%; height: 100%; object-fit: cover; margin: 0;">
+            </div>
+            <div>
+                <h3 style="margin-bottom: 10px; font-size: 2.2rem; font-weight: 800; background: linear-gradient(to right, var(--text-color), var(--primary-color)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Nome da Empresa</h3>
+                <p id="merchantPhrase"
+                    style="color: var(--text-muted); font-style: italic; font-size: 1.1em; margin: 0; opacity: 0.9;">"Sua frase de
+                    efeito aparecerá aqui."</p>
+            </div>
+        </div>
+
+        <div id="selectedServiceInfo" class="hidden">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h4 style="margin: 0; color: var(--primary-color);" id="displayNameService">Serviço</h4>
+                <button type="button" onclick="handleChangeService()"
+                    style="padding: 6px 12px; font-size: 0.8rem; background-color: transparent; color: var(--text-color); border: 1px solid var(--border-color);">Trocar
+                    Serviço</button>
+            </div>
+            <div class="info-item">
+                <span>⏱️</span> <span id="serviceDuration">60m</span>
+            </div>
+            <div class="info-item">
+                <span>💰</span> <span id="servicePrice">R$ 35,00</span>
+            </div>
+        </div>
+
+        <div class="info-item" id="merchantAddressContainer">
+            <span>📍</span> <span id="merchantAddress">Endereço não informado</span>
+        </div>
+        <div class="info-item">
+            <span>🌐</span> <span id="nowISO">carregando...</span>
+        </div>
+    </div>
+
+    <script>
+        // Relógio em tempo real: atualiza o elemento com id 'nowISO' a cada segundo
+        (function () {
+            const el = document.getElementById('nowISO');
+            if (!el) return;
+
+            function updateNow() {
+                const now = new Date();
+                // Exibe data e hora no formato pt-BR
+                el.textContent = now.toLocaleString('pt-BR');
+                // Mantém o ISO no tooltip
+                el.title = now.toISOString();
+            }
+
+            // Atualiza imediatamente
+            updateNow();
+
+            // Intervalo que atualiza a cada segundo
+            let intervalId = setInterval(updateNow, 1000);
+
+            // Pausa atualização quando a aba fica oculta (economia de CPU)
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    clearInterval(intervalId);
+                    intervalId = null;
+                } else if (!intervalId) {
+                    updateNow();
+                    intervalId = setInterval(updateNow, 1000);
+                }
+            });
+
+            // Limpa o intervalo ao descarregar a página
+            window.addEventListener('beforeunload', () => {
+                if (intervalId) clearInterval(intervalId);
+            });
+        })();
+    </script>
+
+    <script>
+        // Busca perfil do comerciante e aplica informações (avatar, nome, frase, cores)
+        (async function () {
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const merchantId = urlParams.get('merchant') || localStorage.getItem('merchantId') || 1;
+                const res = await fetch(`/api/merchants/${merchantId}`);
+                if (!res.ok) return; // silencioso, não atrapalha
+                const m = await res.json();
+
+                // Nome e Titulo da Aba
+                if (m.username) {
+                    const displayName = (m.settings && m.settings.displayName) || m.username;
+                    const titleEl = document.querySelector('.profile-header h3');
+                    if (titleEl) titleEl.textContent = displayName;
+                    document.title = `Agendar - ${displayName}`;
+                }
+
+                // Avatar (Logo) - Usar link direto da nova tabela de assets (evita problemas com Base64 gigante)
+                const timestamp = Date.now();
+                const rawUrl = `/api/merchants/${merchantId}/assets/logo/raw?t=${timestamp}`;
+                let avatar = (m.settings && m.settings.avatar) || '';
+                let isPDF = false;
+
+                const assetCheck = await fetch(`/api/merchants/${merchantId}/assets/logo`);
+                if (assetCheck.ok) {
+                    const assetData = await assetCheck.json();
+                    isPDF = assetData.file_type === 'application/pdf';
+                    avatar = rawUrl;
+                }
+
+                // Render Logo
+                const logoContainer = document.getElementById('avatarContainer');
+                if (logoContainer && avatar) {
+                    // Estilização Premium Centralizada
+                    logoContainer.style.display = 'flex';
+                    logoContainer.style.justifyContent = 'center';
+                    logoContainer.style.alignItems = 'center';
+                    logoContainer.style.marginBottom = '10px';
+                    logoContainer.style.border = 'none'; // Limpar borda anterior do HTML
+
+                    // Container circular para remover bordas brancas (Efeito Foto Profissional)
+                    const circle = document.createElement('div');
+                    circle.style.width = '180px';
+                    circle.style.height = '180px';
+                    circle.style.borderRadius = '50%';
+                    circle.style.overflow = 'hidden';
+                    circle.style.border = '5px solid var(--primary-color)';
+                    circle.style.boxShadow = '0 15px 40px rgba(0,0,0,0.6)';
+                    circle.style.background = '#111';
+                    circle.style.display = 'flex';
+                    circle.style.justifyContent = 'center';
+                    circle.style.alignItems = 'center';
+
+                    logoContainer.innerHTML = '';
+                    logoContainer.appendChild(circle);
+
+                    if (isPDF) {
+                        const canvas = document.createElement('canvas');
+                        canvas.style.width = '100%';
+                        canvas.style.height = '100%';
+                        canvas.style.objectFit = 'cover';
+                        circle.appendChild(canvas);
+
+                        const loadingTask = pdfjsLib.getDocument(avatar);
+                        loadingTask.promise.then(function(pdf) {
+                            return pdf.getPage(1);
+                        }).then(function(page) {
+                            const viewport = page.getViewport({ scale: 2.0 });
+                            canvas.width = viewport.width;
+                            canvas.height = viewport.height;
+                            
+                            const renderContext = {
+                                canvasContext: canvas.getContext('2d'),
+                                viewport: viewport
+                            };
+                            page.render(renderContext);
+                        }).catch(function(err) {
+                            console.error('Erro ao renderizar PDF via pdf.js:', err);
+                            circle.innerHTML = `<object data="${avatar}" type="application/pdf" style="width: 105%; height: 105%; object-fit: cover; pointer-events: auto;"></object>`;
+                        });
+                    } else {
+                        circle.innerHTML = `<img src="${avatar}" alt="Logo" style="width: 100%; height: 100%; object-fit: cover;">`;
+                    }
+                }
+
+                // Frase de Efeito
+                if (m.settings && m.settings.phrase) {
+                    const phraseEl = document.getElementById('merchantPhrase');
+                    if (phraseEl) phraseEl.textContent = `"${m.settings.phrase}"`;
+                }
+
+                // Exibição de timezone se fornecido
+                if (m.settings && m.settings.timezone) {
+                    const tzEl = document.querySelector('#selectedServiceInfo ~ .info-item:last-child span:last-child');
+                    if (tzEl) tzEl.textContent = m.settings.timezone;
+                }
+
+                // Aplicar cores personalizadas (backgroundColor, accentColor)
+                if (m.settings && m.settings.backgroundColor) {
+                    document.body.style.backgroundColor = m.settings.backgroundColor;
+                }
+
+                if (m.settings && m.settings.accentColor) {
+                    // Aplica a cor em botões e destaques
+                    const style = document.createElement('style');
+                    style.textContent = `
+                    button[type="submit"] { background-color: ${m.settings.accentColor} !important; }
+                    .service-card.selected { border-color: ${m.settings.accentColor}; }
+                    a { color: ${m.settings.accentColor}; }
+                `;
+                    document.head.appendChild(style);
+                }
+
+                // Endereço personalizado
+                if (m.settings && m.settings.address) {
+                    const addressEl = document.getElementById('merchantAddress');
+                    if (addressEl) addressEl.textContent = m.settings.address;
+                }
+
+                // Telefone/WhatsApp
+                if (m.settings && m.settings.whatsapp) {
+                    const contactEl = document.createElement('div');
+                    contactEl.className = 'info-item';
+                    contactEl.innerHTML = `<span>💬</span> <a href="https://wa.me/55${m.settings.whatsapp.replace(/\D/g, '')}" target="_blank">WhatsApp</a>`;
+                    document.querySelector('.profile-section').appendChild(contactEl);
+                }
+
+                // Resgatar para outras partes da página
+                window.merchantSettings = m.settings || {};
+
+            } catch (err) {
+                console.error('Erro ao carregar perfil do comerciante', err);
+            }
+        })();
+    </script>
+
+    <!-- Coluna do Meio: Seleção de Serviço & Calendário -->
+    <div class="calendar-section">
+        <div id="serviceSelection"></div>
+        <div id="calendarContainer" class="hidden"></div>
+    </div>
+
+    <!-- Modal: Horários -->
+    <div id="slotsModalOverlay" class="modal-overlay hidden">
+        <div class="slots-section modal">
+            <div class="slots-header"
+                style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h3 id="selectedDateDisplay" style="margin: 0;">Selecione uma data</h3>
+                <button type="button" onclick="closeSlotsModal()"
+                    style="background: none; border: none; font-size: 1.5rem; color: var(--text-muted); cursor: pointer; padding: 0; width: auto; height: auto;">&times;</button>
+            </div>
+            <div id="slotsList" class="slots-list" style="max-height: 50vh;">
+                <p style="text-align: center; color: var(--text-muted);">Horários disponíveis aparecerão aqui.</p>
+            </div>
+            <div style="margin-top: 20px; text-align: center;">
+                <button type="button" onclick="closeSlotsModal()"
+                    style="background-color: var(--input-bg); color: var(--text-color); border: 1px solid var(--border-color); width: 100%;">←
+                    Escolher outra data</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Formulário Oculto para Agendamento -->
+    <div id="bookingModalOverlay" class="modal-overlay hidden" style="z-index: 1001;">
+        <div id="bookingForm" class="card"
+            style="width: 100%; max-width: 400px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); position: relative; max-height: 90vh; overflow-y: auto;">
+            <h3 style="margin-top: 0;">Confirmar Agendamento</h3>
+            <p><strong>Serviço:</strong> <span id="confirmService"></span></p>
+            <p><strong>Horário:</strong> <span id="confirmTime"></span></p>
+            <form id="confirmForm" style="margin-top: 20px;">
+                <label style="display: block; margin-bottom: 5px;">Seu Nome</label>
+                <input type="text" id="clientName" placeholder="Ex: João Silva" required>
+
+                <label style="display: block; margin-bottom: 5px;">Seu Telefone (WhatsApp)</label>
+                <input type="tel" id="clientPhone" placeholder="(XX) 9XXXX-XXXX" required maxlength="15">
+                <small
+                    style="display: block; margin-top: -10px; margin-bottom: 15px; color: var(--text-muted); font-size: 0.8em;">Insira
+                    o DDD e número corretos para confirmação.</small>
+
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button type="submit" style="flex: 1;">Confirmar</button>
+                    <button type="button" onclick="closeBookingModal()"
+                        style="flex: 1; background-color: var(--border-color); color: var(--text-color);">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+    <script src="js/calendar.js"></script>
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        // Prioriza a URL, depois o localStorage (para quando o próprio comerciante estiver testando)
+        const merchantId = urlParams.get('merchant') || localStorage.getItem('merchantId');
+
+        // Se não houver merchantId identificável, não carrega a agenda default 1, impede o carregamento.
+        if (!merchantId) {
+            document.body.innerHTML = `
+                <div style="height: 100vh; display: flex; align-items: center; justify-content: center; flex-direction: column; background: #121212; color: #fff; padding: 20px; text-align: center;">
+                    <h2 style="color: var(--danger-color, #ff4d4d);">Link Inválido</h2>
+                    <p>Por favor, solicite o link de agendamento correto ao seu profissional.</p>
+                </div>
+            `;
+            throw new Error("Comerciante não especificado. Bloqueando carregamento.");
+        }
+
+        let currentService = null;
+        let currentDate = null;
+
+        const serviceManager = new ServiceManager('serviceSelection', (service) => {
+            currentService = service;
+            document.getElementById('displayNameService').textContent = service.name;
+            document.getElementById('serviceDuration').textContent = `${service.duration}m`;
+            document.getElementById('servicePrice').textContent = `R$ ${service.price}`;
+            document.getElementById('selectedServiceInfo').classList.remove('hidden');
+            document.getElementById('serviceSelection').classList.add('hidden');
+            document.getElementById('calendarContainer').classList.remove('hidden');
+            calendar.render();
+        });
+
+        function handleChangeService() {
+            currentService = null;
+            document.getElementById('selectedServiceInfo').classList.add('hidden');
+            document.getElementById('serviceSelection').classList.remove('hidden');
+            document.getElementById('calendarContainer').classList.add('hidden');
+
+            // clear calendar selection
+            calendar.selectedDate = null;
+            calendar.render();
+        }
+
+        function closeSlotsModal() {
+            document.getElementById('slotsModalOverlay').classList.add('hidden');
+        }
+
+        const calendar = new Calendar('calendarContainer', (date) => {
+            currentDate = date;
+            const dateStr = date.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric', month: 'long' });
+            document.getElementById('selectedDateDisplay').textContent = dateStr;
+
+            if (!currentService) return;
+
+            // Show the modal
+            document.getElementById('slotsModalOverlay').classList.remove('hidden');
+
+            loadSlots(date);
+        });
+
+        serviceManager.loadServices(merchantId);
+
+        async function loadSlots(date) {
+            const list = document.getElementById('slotsList');
+            list.innerHTML = '<p style="text-align: center;">Carregando...</p>';
+            if (!currentService) return;
+            try {
+                // Verificar se o dia está fechado antes mesmo de buscar os agendamentos online
+                const settings = window.merchantSettings || {};
+                const dayOfWeek = date.getDay();
+
+                // Fallback para não quebrar cadastros antigos
+                const defaultWorkStart = settings.workStart || "09:00";
+                const scheduleConfig = (settings.schedule && settings.schedule[dayOfWeek])
+                    ? settings.schedule[dayOfWeek]
+                    : { isOpen: (dayOfWeek !== 0), workStart: defaultWorkStart, workEnd: settings.workEnd || "18:00", lunchStart: settings.lunchStart || "", lunchEnd: settings.lunchEnd || "" };
+
+                if (!scheduleConfig.isOpen) {
+                    list.innerHTML = '<p style="text-align: center; color: var(--danger-color); font-weight: bold;">Fechado neste dia.</p>';
+                    return;
+                }
+
+                const dateStr = date.toISOString().split('T')[0];
+                const startOfDay = new Date(dateStr + 'T00:00:00').toISOString();
+                const endOfDay = new Date(dateStr + 'T23:59:59').toISOString();
+                const appointments = await getAppointments(merchantId, startOfDay, endOfDay);
+
+                // Geração de slots baseada no day config
+                const slots = generateSlots(date, currentService.duration, appointments, scheduleConfig);
+
+                list.innerHTML = '';
+                if (slots.length === 0) {
+                    list.innerHTML = '<p style="text-align: center;">Nenhum horário disponível.</p>';
+                    return;
+                }
+                slots.forEach(slot => {
+                    const el = document.createElement('div');
+                    el.className = 'time-slot';
+                    el.textContent = slot.timeLabel;
+                    el.onclick = () => openBookingModal(slot);
+                    list.appendChild(el);
+                });
+            } catch (err) {
+                console.error(err);
+                list.innerHTML = '<p style="text-align: center;">Erro ao carregar horários.</p>';
+            }
+        }
+
+        function generateSlots(date, durationMinutes, appointments, scheduleConfig) {
+            const slots = [];
+
+            const startStr = scheduleConfig.workStart || "09:00";
+            const endStr = scheduleConfig.workEnd || "18:00";
+
+            const [startH, startM] = startStr.split(':').map(Number);
+            const [endH, endM] = endStr.split(':').map(Number);
+
+            let current = new Date(date);
+            current.setHours(startH, startM || 0, 0, 0);
+            const end = new Date(date);
+            end.setHours(endH, endM || 0, 0, 0);
+
+            let lunchStart = null;
+            let lunchEnd = null;
+            if (scheduleConfig.lunchStart && scheduleConfig.lunchEnd) {
+                const [lsH, lsM] = scheduleConfig.lunchStart.split(':').map(Number);
+                const [leH, leM] = scheduleConfig.lunchEnd.split(':').map(Number);
+                lunchStart = new Date(date);
+                lunchStart.setHours(lsH, lsM || 0, 0, 0);
+                lunchEnd = new Date(date);
+                lunchEnd.setHours(leH, leM || 0, 0, 0);
+            }
+
+            const now = new Date();
+            while (current < end) {
+                const slotEnd = new Date(current.getTime() + durationMinutes * 60000);
+                if (slotEnd > end) break;
+
+                // Pular se o horário de início for antes de agora
+                if (current < now) {
+                    current = slotEnd;
+                    continue;
+                }
+
+                // Verificar intervalo de almoço
+                if (lunchStart && lunchEnd) {
+                    if (current < lunchEnd && slotEnd > lunchStart) {
+                        // Se qualquer parte do bloco cair no almoço, pular para o final do almoço
+                        current = new Date(lunchEnd);
+                        continue;
+                    }
+                }
+
+                const isBooked = appointments.some(app => {
+                    const appStart = new Date(app.start_time);
+                    const appEnd = new Date(app.end_time);
+                    return (current < appEnd && slotEnd > appStart);
+                });
+                if (!isBooked) {
+                    slots.push({ start: new Date(current), end: new Date(slotEnd), timeLabel: current.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) });
+                }
+                current = slotEnd;
+            }
+            return slots;
+        }
+
+        function openBookingModal(slot) {
+            document.getElementById('confirmService').textContent = currentService.name;
+            document.getElementById('confirmTime').textContent = `${slot.timeLabel} - ${slot.start.toLocaleDateString('pt-BR')}`;
+            window.selectedSlot = slot;
+            document.getElementById('bookingModalOverlay').classList.remove('hidden');
+        }
+
+        function closeBookingModal() {
+            document.getElementById('bookingModalOverlay').classList.add('hidden');
+        }
+
+        // Mask for Phone
+        document.getElementById('clientPhone').addEventListener('input', function (e) {
+            let val = e.target.value.replace(/\D/g, '');
+            let x = val.match(/(\d{0,2})(\d{0,1})(\d{0,4})(\d{0,4})/);
+            if (!x) return;
+            if (!x[2]) {
+                e.target.value = x[1];
+            } else {
+                e.target.value = '(' + x[1] + ') ' + x[2] + (x[3] ? x[3] : '') + (x[4] ? '-' + x[4] : '');
+            }
+        });
+
+        document.getElementById('confirmForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('clientName').value;
+            const phone = document.getElementById('clientPhone').value;
+            const slot = window.selectedSlot;
+            try {
+                const res = await createAppointment({ merchantId, client_name: name, client_phone: phone, service_id: currentService.id, start_time: slot.start.toISOString(), end_time: slot.end.toISOString() });
+                if (res.error) alert('Erro: ' + res.error); else { alert('Agendamento realizado com sucesso!'); location.reload(); }
+            } catch (err) { alert('Erro ao agendar.'); }
+        });
+    </script>
+
+</body>
+
+</html>

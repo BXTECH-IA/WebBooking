@@ -1,0 +1,1267 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="dark">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content">
+    <title>WebBooking - Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <link rel="stylesheet" type="text/css" href="https://npmcdn.com/flatpickr/dist/themes/dark.css">
+    <!-- PDF.js para renderizar logos PDF como imagem -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    </script>
+</head>
+
+<body>
+    <script>
+        // Aplica o tema salvo logo no carregamento para evitar flash
+        (function () {
+            const t = localStorage.getItem('theme');
+            if (t === 'light') {
+                document.documentElement.classList.remove('dark');
+                document.documentElement.classList.add('light');
+            }
+        })();
+    </script>
+    <nav class="navbar">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <div id="navAvatarContainer"
+                style="width: 50px; height: 50px; border-radius: 50%; overflow: hidden; background-color: var(--input-bg);">
+                <img id="navAvatarImg" src="css/img/sua-foto.png" alt="Avatar"
+                    style="width: 100%; height: 100%; object-fit: cover;">
+            </div>
+            <div>
+                <h2 style="margin: 0; color: var(--text-color); font-size: 1.2rem;">Carvalho - Barber Shop</h2>
+                <p style="margin: 0; color: var(--primary-color); font-size: 0.85rem; font-weight: bold;">Painel
+                    Administrativo</p>
+            </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 20px; flex-wrap: wrap;">
+            <div
+                style="display: flex; gap: 15px; color: var(--text-muted); font-size: 0.9rem; border-right: 1px solid #333; padding-right: 20px;">
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <span>📍</span> <span>Local: Seu Endereço</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <span>🌐</span> <span id="nowISO">carregando...</span>
+                </div>
+            </div>
+            <span id="merchantName" style="margin-right: 15px; color: var(--text-color); font-weight: bold;"></span>
+            <button id="toggleTheme" style="padding: 5px 10px; border-radius: 8px;">🌓</button>
+            <button onclick="logout()"
+                style="padding: 5px 15px; background-color: var(--danger-color); color: var(--text-color); border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">Sair</button>
+        </div>
+    </nav>
+
+    <!-- Modal de edição de serviço (escondido por padrão) -->
+    <div id="editServiceModal" class="modal"
+        style="display:none; position:fixed; inset:0; background: rgba(0,0,0,0.6); z-index:2000; align-items:center; justify-content:center;">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="editServiceTitle"
+            style="background:var(--card-bg); color:var(--text-color); padding:20px; border-radius:8px; width:90%; max-width:420px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+            <h3 id="editServiceTitle" style="margin-top:0;">Editar Serviço</h3>
+            <form id="editServiceForm">
+                <label style="display:block; margin-bottom:6px;">Nome do Serviço</label>
+                <input id="editServiceName" type="text" style="width:100%; padding:8px; margin-bottom:10px;" required>
+                <div style="display:flex; gap:8px;">
+                    <div style="flex:1;">
+                        <label style="display:block; margin-bottom:6px;">Duração (min)</label>
+                        <input id="editServiceDuration" type="number" style="width:100%; padding:8px;" required>
+                    </div>
+                    <div style="width:140px;">
+                        <label style="display:block; margin-bottom:6px;">Preço (R$)</label>
+                        <input id="editServicePrice" type="number" step="0.01" style="width:100%; padding:8px;"
+                            required>
+                    </div>
+                </div>
+                <div style="display:flex; gap:10px; margin-top:16px;">
+                    <button id="saveEditService" type="submit" style="flex:1;">Salvar</button>
+                    <button id="cancelEditService" type="button"
+                        style="flex:1; background:var(--border-color); color:var(--text-color);">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="editAppointmentModal" class="modal"
+        style="display:none; position:fixed; inset:0; background: rgba(0,0,0,0.6); z-index:2000; align-items:center; justify-content:center;">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="editApptTitle"
+            style="background:var(--card-bg); color:var(--text-color); padding:20px; border-radius:8px; width:90%; max-width:420px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+            <h3 id="editApptTitle" style="margin-top:0;">Editar Agendamento</h3>
+            <form id="editApptForm">
+                <input type="hidden" id="editApptId">
+                <label style="display:block; margin-bottom:6px;">Serviço</label>
+                <select id="editApptService" required
+                    style="width:100%; padding:8px; margin-bottom:10px; border-radius:4px; border:1px solid var(--border-color); background-color:var(--bg-color); color:var(--text-color);"></select>
+
+                <label style="display:block; margin-bottom:6px;">Data e Hora Original (Início)</label>
+                <input id="editApptStart" type="text" style="width:100%; padding:8px; margin-bottom:10px;" required>
+
+                <label style="display:block; margin-bottom:6px;">Status</label>
+                <select id="editApptStatus"
+                    style="width:100%; padding:8px; margin-bottom:10px; border-radius:4px; border:1px solid var(--border-color); background-color:var(--bg-color); color:var(--text-color);">
+                    <option value="scheduled">Agendado</option>
+                    <option value="concluído">Concluído</option>
+                    <option value="cancelled">Cancelado</option>
+                </select>
+
+                <div style="display:flex; gap:10px; margin-top:16px;">
+                    <button id="saveEditAppt" type="submit" style="flex:1;">Salvar Alterações</button>
+                    <button type="button" onclick="closeEditApptModal()"
+                        style="flex:1; background:var(--border-color); color:var(--text-color);">Cancelar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="container">
+        <!-- Caixa do Link de Agendamento Exclusivo -->
+        <div id="bookingLinkBox" class="card"
+            style="margin-bottom: 20px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 15px; background-color: var(--input-bg); border-left: 5px solid var(--primary-color);">
+            <div>
+                <h3 style="margin:0; color:var(--text-color);">Seu Link de Agendamento</h3>
+                <p style="margin:0; font-size: 0.9em; color: var(--text-muted);">Compartilhe este link com seus
+                    clientes. Eles verão apenas a sua agenda.</p>
+            </div>
+            <div style="display: flex; gap: 10px; align-items: center; flex: 1; max-width: 500px;">
+                <input type="text" id="merchantLink" readonly
+                    style="flex: 1; margin-bottom: 0; cursor: default; background: var(--card-bg);">
+                <button type="button" onclick="copyBookingLink()" style="margin-bottom: 0; min-width: 120px;">Copiar
+                    Link</button>
+            </div>
+        </div>
+
+        <!-- Tabs Navigation -->
+        <div class="tabs-nav"
+            style="display: flex; gap: 10px; margin-bottom: 20px; border-bottom: 2px solid var(--border-color); padding-bottom: 15px; overflow-x: auto;">
+            <button id="btn-tab-overview" class="tab-btn active" onclick="switchTab('overview')"
+                style="background: var(--primary-color); color: var(--text-color); border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; white-space: nowrap;">Visão
+                Geral</button>
+            <button id="btn-tab-clients" class="tab-btn" onclick="switchTab('clients')"
+                style="background: transparent; color: var(--text-muted); border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; white-space: nowrap;">Meus
+                Clientes</button>
+            <button id="btn-tab-finance" class="tab-btn" onclick="switchTab('finance')"
+                style="background: transparent; color: var(--text-muted); border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; white-space: nowrap;">Financeiro</button>
+        </div>
+
+        <div id="tab-overview" class="tab-content">
+            <div class="dashboard-layout">
+                <!-- Left Column: Calendar & Appointments -->
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    <div class="card">
+                        <h3>Calendário de Agendamentos</h3>
+                        <div id="calendarContainer"></div>
+                    </div>
+
+                    <div class="card">
+                        <h3>Agendamentos do Dia: <span id="selectedDateDisplay">Hoje</span></h3>
+                        <div id="appointmentsList">
+                            <p>Selecione uma data no calendário.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Column: Management -->
+                <div style="display: flex; flex-direction: column; gap: 20px;">
+                    <div class="card">
+                        <h3>Gerenciar Serviços</h3>
+                        <form id="addServiceForm">
+                            <input type="text" id="serviceName" placeholder="Nome do Serviço" required>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="number" id="serviceDuration" placeholder="Minutos" required>
+                                <input type="number" id="servicePrice" placeholder="Preço (R$)" step="0.01" required>
+                            </div>
+                            <button type="submit" style="width: 100%;">Adicionar Serviço</button>
+                        </form>
+
+                        <div id="servicesList"
+                            style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+                            <!-- Services will be listed here -->
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h3>Novo Horário Fixo (Mensal)</h3>
+                        <form id="fixedPlanForm">
+                            <input type="text" id="planClientName" placeholder="Nome do Cliente" required
+                                style="margin-bottom:8px;">
+                            <input type="text" id="planClientPhone" placeholder="Telefone" required
+                                style="margin-bottom:8px;">
+                            <label
+                                style="font-size: 0.85em; color: var(--text-muted); display: block; margin-bottom: 5px;">Serviço
+                                (Base para duração)</label>
+                            <select id="planService" required
+                                style="width:100%; padding:10px; margin-bottom:8px; border-radius:5px; border:1px solid var(--border-color); background-color:var(--bg-color); color:var(--text-color);">
+                                <option value="">Selecione o Serviço...</option>
+                            </select>
+                            <label
+                                style="font-size: 0.85em; color: var(--text-muted); display: block; margin-bottom: 5px;">1º
+                                Agendamento</label>
+                            <input type="text" id="planStart" placeholder="Data/Hora Inicial" required
+                                style="margin-bottom:8px;">
+                            <button type="submit"
+                                style="width: 100%; background-color: var(--primary-color); color: var(--text-color);">Criar
+                                Plano</button>
+                        </form>
+                    </div>
+
+                    <div class="card">
+                        <h3>Configurações da Página</h3>
+                        <form id="settingsForm">
+                            <p class="section-description">Personalize a aparência da sua página de agendamentos.</p>
+                
+                            <div style="background: rgba(255,193,7,0.1); border-left: 4px solid #ffc107; padding: 10px; margin-bottom: 20px; border-radius: 4px;">
+                                <p style="margin: 0; font-size: 0.85rem; color: #ffc107;">
+                                    <strong>Dica:</strong> O limite para o logo (inclusive PDF) é de <strong>4MB</strong>. 
+                                    Arquivos maiores que isso não podem ser salvos devido às limitações da hospedagem.
+                                </p>
+                            </div>
+
+                            <label
+                                style="display:block; margin-bottom:5px; font-size: 0.9em; color: var(--text-muted);">Nome
+                                do Negócio</label>
+                            <input type="text" id="settingDisplayName" placeholder="Ex: Carvalho - Barber Shop">
+
+                            <label
+                                style="display:block; margin-bottom:5px; margin-top:10px; font-size: 0.9em; color: var(--text-muted);">Logo
+                                do Negócio (JPG, PNG, PDF)</label>
+                            <div style="display:flex; gap:10px; align-items:center; margin-bottom: 5px;">
+                                <div id="currentAvatarPreview"></div>
+                                <input type="file" id="settingAvatarFile" accept=".jpg,.jpeg,.png,application/pdf"
+                                    style="flex:1; margin-bottom: 0; padding: 5px;">
+                            </div>
+                            <input type="hidden" id="settingAvatar">
+
+                            <label
+                                style="display:block; margin-bottom:5px; margin-top:10px; font-size: 0.9em; color: var(--text-muted);">Endereço</label>
+                            <input type="text" id="settingAddress" placeholder="Ex: 1231 Av. Albino Timm">
+
+                            <label
+                                style="display:block; margin-bottom:5px; margin-top:10px; font-size: 0.9em; color: var(--text-muted);">Frase
+                                de Efeito</label>
+                            <input type="text" id="settingPhrase" placeholder="Ex: O melhor corte da região!">
+
+                            <hr style="border: 1px solid var(--border-color); margin: 20px 0;">
+
+                            <h4 style="margin-top:0; color:var(--primary-color);">Horários de Funcionamento</h4>
+                            <p style="font-size: 0.85em; color: var(--text-muted); margin-bottom: 15px;">Configure os
+                                horários para cada dia da semana. Desmarque a caixa se estiver fechado no dia.</p>
+                            <div id="weeklyScheduleContainer"
+                                style="display: flex; flex-direction: column; gap: 15px; margin-bottom: 20px;">
+                                <!-- Gerado via JavaScript dinamicamente -->
+                            </div>
+
+                            <button type="submit" style="width: 100%; margin-top: 15px;">Salvar E Editar Página</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div> <!-- Fim de tab-overview -->
+
+    <!-- Aba: Meus Clientes -->
+    <div id="tab-clients" class="tab-content" style="display: none;">
+        <div class="card">
+            <h3>Meus Clientes</h3>
+            <div id="clientsTableBody" style="display: flex; flex-direction: column; gap: 15px; margin-top: 15px;">
+                <p>Carregando...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Aba: Financeiro -->
+    <div id="tab-finance" class="tab-content" style="display: none;">
+        <div class="card">
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                <h3 style="margin-top: 0;">Desempenho Financeiro (Últimos 7 dias)</h3>
+            </div>
+
+            <div style="display: flex; gap: 20px; margin-top: 15px; margin-bottom: 20px; flex-wrap: wrap;">
+                <div
+                    style="flex: 1; min-width: 200px; background: var(--input-bg); padding: 20px; border-radius: 8px; border-left: 5px solid var(--primary-color);">
+                    <p style="margin: 0; color: var(--text-muted); font-size: 0.9em;">Faturamento Total Concluído</p>
+                    <h2 style="margin: 5px 0 0 0; color: var(--primary-color); font-size: 2em;" id="financeTotalTitle">
+                        R$ 0,00</h2>
+                </div>
+            </div>
+
+            <div
+                style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+                <canvas id="financeChartCanvas" style="width: 100%; height: 260px; display: block;"></canvas>
+            </div>
+
+            <div id="financeListContainer" style="display: flex; flex-direction: column; gap: 10px;">
+                <p>Carregando...</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="editClientModal" class="modal"
+        style="display:none; position:fixed; inset:0; background: rgba(0,0,0,0.6); z-index:2000; align-items:center; justify-content:center;">
+        <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="editClientTitle"
+            style="background:var(--card-bg); color:var(--text-color); padding:20px; border-radius:8px; width:90%; max-width:420px; box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+            <h3 id="editClientTitle" style="margin-top:0;">Editar Perfil do Cliente</h3>
+            <form id="editClientForm">
+                <input type="hidden" id="editClientPhone">
+
+                <label style="display:block; margin-bottom:6px;">Celular (Para atualizar)</label>
+                <input type="text" id="editClientNewPhone" placeholder="(XX) XXXXX-XXXX"
+                    style="width:100%; padding:8px; margin-bottom:10px; border-radius:4px; border:1px solid var(--border-color); background-color:var(--bg-color); color:var(--text-color);">
+
+                <label style="display:block; margin-bottom:6px;">Email (Opcional)</label>
+                <input type="email" id="editClientEmail" placeholder="cliente@email.com"
+                    style="width:100%; padding:8px; margin-bottom:10px; border-radius:4px; border:1px solid var(--border-color); background-color:var(--bg-color); color:var(--text-color);">
+
+                <label style="display:block; margin-bottom:6px;">Data de Aniversário (Opcional)</label>
+                <input type="date" id="editClientBirthday"
+                    style="width:100%; padding:8px; margin-bottom:15px; border-radius:4px; border:1px solid var(--border-color); background-color:var(--bg-color); color:var(--text-color);">
+
+                <div style="display:flex; justify-content:space-between; gap:10px;">
+                    <button type="button" onclick="closeEditClientModal()"
+                        style="background-color:var(--text-muted); flex:1;">Cancelar</button>
+                    <button type="submit" style="background-color:var(--primary-color); flex:1;">Salvar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/pt.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="js/app.js"></script>
+    <script src="js/calendar.js"></script>
+    <script>
+        const merchantId = localStorage.getItem('merchantId');
+        if (!merchantId) window.location.href = 'index.html';
+
+        document.getElementById('merchantName').textContent = localStorage.getItem('merchantName');
+
+        function logout() {
+            localStorage.clear();
+            window.location.href = 'index.html';
+        }
+
+        // --- Client Profiles Logic ---
+        function openEditClientModal(phone, name, email, bday) {
+            document.getElementById('editClientTitle').textContent = 'Editar: ' + name;
+            document.getElementById('editClientPhone').value = phone;
+            document.getElementById('editClientNewPhone').value = phone;
+            document.getElementById('editClientEmail').value = email || '';
+            document.getElementById('editClientBirthday').value = bday || '';
+            document.getElementById('editClientModal').style.display = 'flex';
+        }
+
+        function closeEditClientModal() {
+            document.getElementById('editClientModal').style.display = 'none';
+        }
+
+        document.getElementById('editClientForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const phone = document.getElementById('editClientPhone').value;
+            const newPhone = document.getElementById('editClientNewPhone').value;
+            const email = document.getElementById('editClientEmail').value;
+            const bday = document.getElementById('editClientBirthday').value;
+
+            try {
+                const res = await fetch('/api/clients/' + encodeURIComponent(phone), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ merchantId, email, birthday: bday, newPhone })
+                });
+
+                if (res.ok) {
+                    closeEditClientModal();
+                    alert('Perfil do cliente atualizado!');
+                    loadClientsTab(); // Recarrega a tabela de clientes
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Erro ao salvar cliente');
+                }
+            } catch (err) {
+                alert('Erro ao comunicar com servidor.');
+            }
+        });  // Setup the specific link
+        const bookingPath = window.location.pathname.replace('dashboard.html', 'booking.html');
+        const bookingBaseUrl = window.location.origin + (bookingPath.includes('booking.html') ? bookingPath : '/booking.html');
+        document.getElementById('merchantLink').value = `${bookingBaseUrl}?merchant=${merchantId}`;
+
+        function copyBookingLink() {
+            const linkInput = document.getElementById('merchantLink');
+            linkInput.select();
+            linkInput.setSelectionRange(0, 99999); // Mobile compatibility
+            try {
+                navigator.clipboard.writeText(linkInput.value).then(() => {
+                    alert('Link copiado! Envie este link aos seus clientes.');
+                }).catch(err => {
+                    document.execCommand('copy');
+                    alert('Link copiado (execCommand)!');
+                });
+            } catch (e) {
+                document.execCommand('copy');
+                alert('Link copiado (fallback)!');
+            }
+        }
+
+        // --- Tabs Logic ---
+        function switchTab(tabId) {
+            document.getElementById('tab-overview').style.display = 'none';
+            document.getElementById('tab-clients').style.display = 'none';
+            document.getElementById('tab-finance').style.display = 'none';
+
+            const btns = document.querySelectorAll('.tab-btn');
+            btns.forEach(b => {
+                b.style.background = 'transparent';
+                b.style.color = 'var(--text-muted)';
+            });
+
+            document.getElementById('tab-' + tabId).style.display = 'block';
+            const activeBtn = document.getElementById('btn-tab-' + tabId);
+            activeBtn.style.background = 'var(--primary-color)';
+            activeBtn.style.color = 'var(--text-color)';
+
+            if (tabId === 'clients') loadClientsTab();
+            if (tabId === 'finance') loadFinanceTab();
+        }
+
+        async function loadClientsTab() {
+            const list = document.getElementById('clientsTableBody');
+            list.innerHTML = '<p>Carregando...</p>';
+            try {
+                const response = await fetch('/api/clients?merchantId=' + merchantId);
+                const res = await response.json();
+                if (res.length === 0) {
+                    list.innerHTML = '<p style="color: var(--text-muted);">Nenhum cliente agendado ainda.</p>';
+                    return;
+                }
+                list.innerHTML = res.map(c => {
+                    const d = new Date(c.last_appointment);
+                    const bdayStr = c.client_birthday ? new Date(c.client_birthday).toISOString().split('T')[0].split('-').reverse().join('/') : '';
+                    const emailStr = c.client_email ? '<br><span style="font-size: 0.85em; color: var(--text-muted);">📧 ' + c.client_email + '</span>' : '';
+                    const bdayLine = bdayStr ? '<br><span style="font-size: 0.85em; color: var(--text-muted);">🎂 ' + bdayStr + '</span>' : '';
+                    const safeBday = c.client_birthday ? new Date(c.client_birthday).toISOString().split('T')[0] : '';
+
+                    return '<div style="display: flex; justify-content: space-between; align-items: center; background: var(--input-bg); padding: 15px; border-radius: 8px; border-left: 5px solid var(--primary-color);">' +
+                        '<div>' +
+                        '<strong style="color: var(--text-color); font-size: 1.1em;">' + c.client_name + '</strong>' +
+                        '<br>' +
+                        '<span style="color: var(--primary-color); font-weight: bold;">📱 ' + c.client_phone + '</span>' +
+                        emailStr +
+                        bdayLine +
+                        '<div style="margin-top: 5px; font-size: 0.8em; color: var(--text-muted);">' +
+                        c.total_appointments + ' cortes • Último: ' + d.toLocaleDateString('pt-BR') +
+                        '</div>' +
+                        '</div>' +
+                        '<div>' +
+                        '<button onclick="openEditClientModal(\'' + c.client_phone + '\', \'' + c.client_name + '\', \'' + (c.client_email || '') + '\', \'' + safeBday + '\')" class="btn" style="padding: 8px 12px; font-size: 0.9em; cursor: pointer;">✏️ Editar</button>' +
+                        '</div>' +
+                        '</div>';
+                }).join('');
+            } catch (err) {
+                list.innerHTML = '<p style="color: var(--danger-color);">Erro ao carregar clientes.</p>';
+            }
+        }
+
+        let financeChartInstance = null;
+
+        async function loadFinanceTab() {
+            const listC = document.getElementById('financeListContainer');
+            const totalTitle = document.getElementById('financeTotalTitle');
+
+            listC.innerHTML = '<p>Carregando...</p>';
+            totalTitle.textContent = 'Carregando...';
+
+            const end = new Date();
+            const start = new Date();
+            start.setDate(end.getDate() - 7);
+
+            try {
+                const response = await fetch('/api/finance?merchantId=' + merchantId + '&start=' + start.toISOString() + '&end=' + end.toISOString());
+                const res = await response.json();
+                if (res.length === 0) {
+                    listC.innerHTML = '<p style="color: var(--text-muted);">Nenhum faturamento registrado neste período de 7 dias.</p>';
+                    totalTitle.textContent = 'R$ 0,00';
+                    if (financeChartInstance) financeChartInstance.destroy();
+                    return;
+                }
+
+                let grandTotal = 0;
+
+                // Processar HTML da lista
+                const html = res.map(day => {
+                    const val = parseFloat(day.total_revenue) || 0;
+                    grandTotal += val;
+                    const d = new Date(day.date.split('T')[0] + 'T12:00:00'); // Safe parsing using Noon to dodge timezone shifts
+
+                    return '<div style="display: flex; align-items: center; justify-content: space-between; background: var(--card-bg); padding: 15px; border-radius: 8px; border: 1px solid var(--border-color); border-left: 5px solid #10b981;">' +
+                        '<div>' +
+                        '<span style="font-weight: bold; text-transform: capitalize; color: var(--text-color);">' + d.toLocaleDateString('pt-BR', { weekday: 'long' }) + '</span>' +
+                        '<span style="color: var(--text-muted); font-size: 0.9em; margin-left: 10px;">' + d.toLocaleDateString('pt-BR') + '</span>' +
+                        '</div>' +
+                        '<div style="display: flex; align-items: center; gap: 15px;">' +
+                        '<span style="color: var(--text-muted); font-size: 0.9em;">' + day.total_appointments + ' cortes</span>' +
+                        '<span style="font-weight: bold; font-size: 1.1em; color: var(--primary-color);">R$ ' + val.toFixed(2).replace('.', ',') + '</span>' +
+                        '</div>' +
+                        '</div>';
+                }).join('');
+
+                listC.innerHTML = html;
+                totalTitle.textContent = 'R$ ' + grandTotal.toFixed(2).replace('.', ',');
+
+                // Processar dados para o Gráfico (Do mais antigo para o mais novo)
+                const chartData = [...res].reverse();
+                const labels = chartData.map(day => {
+                    const d = new Date(day.date.split('T')[0] + 'T12:00:00');
+                    return d.toLocaleDateString('pt-BR', { weekday: 'short', day: 'numeric' });
+                });
+                const values = chartData.map(day => parseFloat(day.total_revenue) || 0);
+
+                const ctx = document.getElementById('financeChartCanvas').getContext('2d');
+                if (financeChartInstance) {
+                    financeChartInstance.destroy();
+                }
+
+                financeChartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Faturamento Diário',
+                            data: values,
+                            borderColor: '#00ff88',
+                            backgroundColor: 'rgba(0, 255, 136, 0.15)',
+                            borderWidth: 3,
+                            fill: true,
+                            tension: 0.4,
+                            pointBackgroundColor: '#00ff88',
+                            pointBorderColor: '#121212',
+                            pointBorderWidth: 2,
+                            pointRadius: 4,
+                            pointHoverRadius: 6
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        interaction: {
+                            mode: 'index',
+                            intersect: false,
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
+                                titleColor: '#fff',
+                                bodyColor: '#00ff88',
+                                borderColor: '#333',
+                                borderWidth: 1,
+                                callbacks: {
+                                    label: function (context) {
+                                        return ' R$ ' + context.parsed.y.toFixed(2).replace('.', ',');
+                                    }
+                                }
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: { color: 'rgba(255, 255, 255, 0.05)', drawBorder: false },
+                                ticks: { color: '#aaa', callback: function (value) { return 'R$ ' + value; } }
+                            },
+                            x: {
+                                grid: { display: false, drawBorder: false },
+                                ticks: { color: '#aaa' }
+                            }
+                        }
+                    }
+                });
+
+            } catch (err) {
+                console.error(err);
+                listC.innerHTML = '<p style="color: var(--danger-color);">Erro ao carregar o financeiro.</p>';
+                totalTitle.textContent = 'R$ 0,00';
+            }
+        }
+
+        let currentViewedDate = new Date(); // Track current date
+
+        // Initialize Calendar
+        const calendar = new Calendar('calendarContainer', (date) => {
+            const dateStr = date.toLocaleDateString('pt-BR');
+            document.getElementById('selectedDateDisplay').textContent = dateStr;
+            currentViewedDate = date;
+            loadAppointmentsForDate(date);
+        });
+
+        // Auto-refresh Dashboard silently every 15 seconds
+        setInterval(() => {
+            if (currentViewedDate && document.getElementById('tab-overview').style.display !== 'none') {
+                loadAppointmentsForDate(currentViewedDate, true);
+            }
+        }, 15000);
+
+        async function loadAppointmentsForDate(date, isSilent = false) {
+            const list = document.getElementById('appointmentsList');
+            if (!isSilent) list.innerHTML = '<p>Carregando...</p>';
+
+            try {
+                const dateStr = date.toISOString().split('T')[0];
+                const startOfDay = new Date(dateStr + 'T00:00:00').toISOString();
+                const endOfDay = new Date(dateStr + 'T23:59:59').toISOString();
+
+                const apps = await getAppointments(merchantId, startOfDay, endOfDay);
+
+                if (apps.length === 0) {
+                    list.innerHTML = '<p>Nenhum agendamento para este dia.</p>';
+                    return;
+                }
+
+                list.innerHTML = apps.map(app => {
+                    let statusColor = 'var(--primary-color)';
+                    let statusLabel = 'Agendado';
+                    if (app.status === 'cancelled') {
+                        statusColor = 'var(--danger-color)';
+                        statusLabel = 'Cancelado';
+                    } else if (app.status === 'concluído') {
+                        statusColor = '#10b981'; // Emerald
+                        statusLabel = 'Concluído ✓';
+                    } else if (app.status !== 'scheduled') {
+                        statusLabel = app.status; // fallback
+                    }
+
+                    const renewalBadge = app.is_plan_renewal ? '<span style="background: #ffcc00; color: #000; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: bold; margin-left: 8px;">⚠️ Semana de Renovação</span>' : '';
+                    const serviceNameLine = app.service_name ? `<br><span style="font-size: 0.85rem; color: var(--primary-color);">${app.service_name}</span>` : '';
+
+                    return `
+                    <div class="time-slot" style="display: flex; justify-content: space-between; align-items: center; text-align: left; cursor: default;">
+                        <div>
+                            <strong>${new Date(app.start_time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong> - ${app.client_name} ${renewalBadge}<br>
+                            <span style="font-size: 0.85rem; color: var(--text-muted);">${app.client_phone}</span>${serviceNameLine}
+                        </div>
+                        <div style="display: flex; gap: 10px; align-items: center;">
+                            <span style="color: ${statusColor}; font-weight: bold;">${statusLabel}</span>
+                            <button onclick='openEditApptModal(${JSON.stringify(app).replace(/'/g, "&#39;")})' style="padding: 4px 8px; font-size: 0.8rem; background-color: var(--card-bg); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer;">Editar</button>
+                        </div>
+                    </div>
+                `}).join('');
+            } catch (err) {
+                list.innerHTML = '<p>Erro ao carregar agendamentos.</p>';
+            }
+        }
+
+        // Services Management
+        async function loadServices() {
+            const list = document.getElementById('servicesList');
+            list.innerHTML = '<p>Carregando serviços...</p>';
+            try {
+                const res = await fetch(`/api/services/${merchantId}`);
+                const services = await res.json();
+
+                list.innerHTML = '';
+                const planServiceSelect = document.getElementById('planService');
+                const editApptServiceSelect = document.getElementById('editApptService');
+
+                let optionsHTML = '<option value="">Selecione o Serviço...</option>';
+
+                services.forEach(service => {
+                    optionsHTML += `<option value="${service.id}" data-duration="${service.duration}">${service.name} (${service.duration}m)</option>`;
+
+                    const el = document.createElement('div');
+                    el.className = 'service-card';
+                    el.style.cursor = 'default';
+                    el.innerHTML = `
+                        <div>
+                            <strong>${service.name}</strong><br>
+                            <span style="font-size: 0.8rem; color: #aaa;">${service.duration}m - ${typeof formatPrice === 'function' ? formatPrice(service.price) : ('R$ ' + service.price)}</span>
+                        </div>
+                        <div style="display:flex; gap:8px; align-items:center">
+                            <button onclick="editService(${service.id})" style="padding: 5px; background-color: transparent; color: var(--text-muted);">✏️</button>
+                            <button onclick="deleteService(${service.id})" style="padding: 5px; background-color: transparent; color: var(--danger-color);">🗑️</button>
+                        </div>
+                    `;
+                    list.appendChild(el);
+                });
+
+                if (planServiceSelect) planServiceSelect.innerHTML = optionsHTML;
+                if (editApptServiceSelect) editApptServiceSelect.innerHTML = optionsHTML;
+            } catch (err) {
+                list.innerHTML = '<p>Erro ao carregar serviços.</p>';
+            }
+        }
+
+        document.getElementById('addServiceForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('serviceName').value;
+            const durationRaw = document.getElementById('serviceDuration').value;
+            const priceRaw = document.getElementById('servicePrice').value;
+
+            const duration = parseInt(durationRaw, 10);
+            const price = parseFloat(priceRaw);
+
+            // Validações básicas
+            if (!name || isNaN(duration) || isNaN(price)) {
+                alert('Preencha nome, duração (minutos) e preço corretamente.');
+                return;
+            }
+            if (duration < 5) {
+                alert('Duração mínima do serviço é 5 minutos.');
+                return;
+            }
+            if (price <= 0) {
+                alert('O preço deve ser maior que 0.');
+                return;
+            }
+
+            try {
+                await fetch('/api/services', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ merchant_id: merchantId, name, duration, price })
+                });
+                document.getElementById('addServiceForm').reset();
+                loadServices();
+            } catch (err) {
+                alert('Erro ao adicionar serviço');
+            }
+        });
+
+        // Edit service handler (modal-based)
+        let editingServiceId = null;
+
+        function openEditServiceModal(service) {
+            editingServiceId = service.id;
+            document.getElementById('editServiceName').value = service.name || '';
+            document.getElementById('editServiceDuration').value = service.duration || '';
+            document.getElementById('editServicePrice').value = service.price || '';
+            const modal = document.getElementById('editServiceModal');
+            modal.style.display = 'flex';
+            document.getElementById('editServiceName').focus();
+        }
+
+        async function editService(id) {
+            try {
+                const res = await fetch(`/api/services/${merchantId}`);
+                const services = await res.json();
+                const svc = services.find(s => s.id === id);
+                if (!svc) return alert('Serviço não encontrado');
+                openEditServiceModal(svc);
+            } catch (err) {
+                console.error(err);
+                alert('Erro ao abrir editor de serviço');
+            }
+        }
+
+        function closeEditModal() {
+            editingServiceId = null;
+            const modal = document.getElementById('editServiceModal');
+            modal.style.display = 'none';
+        }
+
+        document.getElementById('cancelEditService').addEventListener('click', (e) => {
+            e.preventDefault();
+            closeEditModal();
+        });
+
+        // Submit handler for modal form
+        document.getElementById('editServiceForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('editServiceName').value.trim();
+            const duration = parseInt(document.getElementById('editServiceDuration').value, 10);
+            const price = parseFloat(document.getElementById('editServicePrice').value);
+
+            if (!name || isNaN(duration) || isNaN(price)) {
+                alert('Preencha nome, duração e preço corretamente.');
+                return;
+            }
+            if (duration < 5) return alert('Duração mínima é 5 minutos');
+            if (price <= 0) return alert('Preço deve ser maior que 0');
+
+            try {
+                await fetch(`/api/services/${editingServiceId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, duration, price })
+                });
+                closeEditModal();
+                loadServices();
+            } catch (err) {
+                console.error(err);
+                alert('Erro ao salvar serviço');
+            }
+        });
+
+        // Close modal on outside click or Esc
+        document.getElementById('editServiceModal').addEventListener('click', (e) => {
+            if (e.target.id === 'editServiceModal') closeEditModal();
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('editServiceModal');
+                if (modal && modal.style.display === 'flex') closeEditModal();
+            }
+        });
+
+        async function deleteService(id) {
+            if (!confirm('Tem certeza que deseja excluir este serviço?')) return;
+            try {
+                const res = await fetch(`/api/services/${id}`, { method: 'DELETE' });
+                if (!res.ok) {
+                    const data = await res.json().catch(() => ({}));
+                    alert('Erro ao deletar serviço: ' + (data.error || `Status ${res.status}`));
+                    return;
+                }
+                loadServices();
+            } catch (err) {
+                console.error(err);
+                alert('Erro ao comunicar com o servidor ao deletar serviço.');
+            }
+        }
+
+        // Initial Load
+        loadServices();
+        loadAppointmentsForDate(new Date());
+
+        // Fixed Plan Form
+        document.getElementById('fixedPlanForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const client_name = document.getElementById('planClientName').value;
+            const client_phone = document.getElementById('planClientPhone').value;
+            const service_id = document.getElementById('planService').value;
+            const start_time = document.getElementById('planStart').value;
+
+            const serviceSelect = document.getElementById('planService');
+            const duration = parseInt(serviceSelect.options[serviceSelect.selectedIndex].dataset.duration, 10);
+
+            if (!duration) { alert('Erro: serviço sem duração válida.'); return; }
+
+            const startObj = new Date(start_time);
+            const endObj = new Date(startObj.getTime() + (duration * 60000));
+
+            try {
+                const res = await fetch(`/api/appointments/fixed-plan`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ merchantId, client_name, client_phone, service_id, start_time: startObj.toISOString(), end_time: endObj.toISOString() })
+                });
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    alert(data.error || 'Erro ao criar plano fixo!');
+                    return;
+                }
+
+                alert('Plano fixo de 4 semanas criado com sucesso!');
+                document.getElementById('fixedPlanForm').reset();
+                loadAppointmentsForDate(new Date());
+            } catch (err) {
+                alert('Erro na comunicação com o servidor ao criar plano');
+            }
+        });
+
+        // Appointment Editing Modal Logic
+        let currentApptEditObj = null;
+
+        window.openEditApptModal = function (apptStr) {
+            let appObj = typeof apptStr === 'string' ? JSON.parse(apptStr) : apptStr;
+            currentApptEditObj = appObj;
+
+            document.getElementById('editApptId').value = appObj.id;
+
+            const dp = document.getElementById('editApptService');
+            if (appObj.service_id) { dp.value = appObj.service_id; }
+
+            // Format start time for flatpickr input
+            let startDate = new Date(appObj.start_time);
+            document.getElementById('editApptStart')._flatpickr.setDate(startDate);
+            document.getElementById('editApptStatus').value = appObj.status === 'cancelled' ? 'cancelled' : 'scheduled';
+
+            document.getElementById('editAppointmentModal').style.display = 'flex';
+        };
+
+        window.closeEditApptModal = function () {
+            document.getElementById('editAppointmentModal').style.display = 'none';
+        };
+
+        document.getElementById('editApptForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('editApptId').value;
+            const service_id = document.getElementById('editApptService').value;
+            const status = document.getElementById('editApptStatus').value;
+            const start_time = document.getElementById('editApptStart').value;
+
+            // Compute end_time based on selected service
+            const serviceSelect = document.getElementById('editApptService');
+            const duration = parseInt(serviceSelect.options[serviceSelect.selectedIndex]?.dataset?.duration || 0, 10);
+
+            if (!duration) { alert('Selecione um serviço válido.'); return; }
+
+            const startObj = new Date(start_time);
+            const endObj = new Date(startObj.getTime() + (duration * 60000));
+
+            try {
+                const res = await fetch(`/api/appointments/${id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ start_time: startObj.toISOString(), end_time: endObj.toISOString(), status, service_id })
+                });
+
+                if (!res.ok) {
+                    alert('Erro ao atualizar agendamento');
+                    return;
+                }
+
+                closeEditApptModal();
+                loadAppointmentsForDate(new Date()); // reload list
+            } catch (err) {
+                console.error(err);
+                alert('Erro ao comunicar com o servidor para editar agendamento.');
+            }
+        });
+
+        // ================= Page Settings Management =================
+        const daysOfWeek = ['Domingo', 'Segunda-feira', 'Terça-feira', 'Quarta-feira', 'Quinta-feira', 'Sexta-feira', 'Sábado'];
+
+        window.toggleDay = function (dayIndex) {
+            const checkbox = document.getElementById(`isOpen_${dayIndex}`);
+            const timesDiv = document.getElementById(`times_${dayIndex}`);
+            if (checkbox && timesDiv) {
+                if (checkbox.checked) {
+                    timesDiv.style.opacity = "1";
+                    timesDiv.style.pointerEvents = "auto";
+                } else {
+                    timesDiv.style.opacity = "0.4";
+                    timesDiv.style.pointerEvents = "none";
+                }
+            }
+        };
+
+        // Gera opções de horário de 00:00 a 23:30 (intervalos de 30 min)
+        function buildTimeOptions(selectedValue) {
+            let opts = '<option value="">--:--</option>';
+            for (let h = 0; h < 24; h++) {
+                for (let m = 0; m < 60; m += 30) {
+                    const hh = String(h).padStart(2, '0');
+                    const mm = String(m).padStart(2, '0');
+                    const val = `${hh}:${mm}`;
+                    const sel = (val === selectedValue) ? 'selected' : '';
+                    opts += `<option value="${val}" ${sel}>${val}</option>`;
+                }
+            }
+            return opts;
+        }
+
+        function renderScheduleInputs(settings) {
+            const container = document.getElementById('weeklyScheduleContainer');
+            if (!container) return;
+            container.innerHTML = '';
+
+            // Fallback para configurações antigas (se existirem)
+            const defaultWorkStart = settings.workStart || '09:00';
+            const defaultWorkEnd = settings.workEnd || '18:00';
+            const defaultLunchStart = settings.lunchStart || '';
+            const defaultLunchEnd = settings.lunchEnd || '';
+
+            // Renderizar cada dia (0 = Domingo, 6 = Sábado)
+            for (let i = 0; i < 7; i++) {
+                const dayConfig = (settings.schedule && settings.schedule[i]) ? settings.schedule[i] : {
+                    isOpen: (i !== 0), // Default: Domingo fechado, outros dias abertos
+                    workStart: defaultWorkStart,
+                    workEnd: defaultWorkEnd,
+                    lunchStart: defaultLunchStart,
+                    lunchEnd: defaultLunchEnd
+                };
+
+                const isChecked = dayConfig.isOpen ? 'checked' : '';
+                const displayOpacity = dayConfig.isOpen ? '1' : '0.4';
+                const pointerEvents = dayConfig.isOpen ? 'auto' : 'none';
+
+                const html = `
+                    <div style="background: rgba(0,0,0,0.1); border: 1px solid var(--border-color); padding: 8px 10px; border-radius: 8px; overflow: hidden;">
+                        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+                            <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 0.85em; color: var(--text-muted); white-space: nowrap;">
+                                <input type="checkbox" id="isOpen_${i}" ${isChecked} onchange="toggleDay(${i})" style="width:18px; height:18px; margin:0;"> Aberto
+                            </label>
+                            <strong style="color: var(--text-color); font-size: 0.95em;">${daysOfWeek[i]}</strong>
+                        </div>
+                        <div id="times_${i}" class="schedule-times-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; opacity: ${displayOpacity}; pointer-events: ${pointerEvents}; transition: opacity 0.3s;">
+                            <div style="text-align:center;">
+                                <label style="font-size: 0.68em; color: var(--text-muted); display:block; margin-bottom:3px; text-transform:uppercase; letter-spacing:0.02em; white-space:nowrap;">Início Exp.</label>
+                                <select id="workStart_${i}" style="margin-bottom:0; padding: 6px 4px; font-size:0.85em; width:100%; text-align:center;">${buildTimeOptions(dayConfig.workStart || '')}</select>
+                            </div>
+                            <div style="text-align:center;">
+                                <label style="font-size: 0.68em; color: var(--text-muted); display:block; margin-bottom:3px; text-transform:uppercase; letter-spacing:0.02em; white-space:nowrap;">Fim Exp.</label>
+                                <select id="workEnd_${i}" style="margin-bottom:0; padding: 6px 4px; font-size:0.85em; width:100%; text-align:center;">${buildTimeOptions(dayConfig.workEnd || '')}</select>
+                            </div>
+                            <div style="text-align:center;">
+                                <label style="font-size: 0.68em; color: var(--text-muted); display:block; margin-bottom:3px; text-transform:uppercase; letter-spacing:0.02em; white-space:nowrap;">Início Almoço</label>
+                                <select id="lunchStart_${i}" style="margin-bottom:0; padding: 6px 4px; font-size:0.85em; width:100%; text-align:center;">${buildTimeOptions(dayConfig.lunchStart || '')}</select>
+                            </div>
+                            <div style="text-align:center;">
+                                <label style="font-size: 0.68em; color: var(--text-muted); display:block; margin-bottom:3px; text-transform:uppercase; letter-spacing:0.02em; white-space:nowrap;">Fim Almoço</label>
+                                <select id="lunchEnd_${i}" style="margin-bottom:0; padding: 6px 4px; font-size:0.85em; width:100%; text-align:center;">${buildTimeOptions(dayConfig.lunchEnd || '')}</select>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', html);
+            }
+        }
+
+        async function loadSettings() {
+            try {
+                const res = await fetch(`/api/merchants/${merchantId}`);
+                if (!res.ok) return;
+                const merchantObj = await res.json();
+                const settings = merchantObj.settings || {};
+
+                // Garantir que os inputs de horário apareçam imediatamente
+                try {
+                    renderScheduleInputs(settings);
+                } catch (err) {
+                    console.error('Erro ao renderizar inputs de horário:', err);
+                }
+
+                // Tentar buscar logo na nova tabela de assets (usando link direto)
+                const timestamp = Date.now();
+                const rawUrl = `/api/merchants/${merchantId}/assets/logo/raw?t=${timestamp}`;
+                
+                let avatar = settings.avatar || ''; 
+                let isPDF = false;
+
+                const checkRes = await fetch(`/api/merchants/${merchantId}/assets/logo`);
+                if (checkRes.ok) {
+                    const checkData = await checkRes.json();
+                    isPDF = checkData.file_type === 'application/pdf';
+                    avatar = rawUrl;
+                }
+
+                // Preencher form
+                document.getElementById('settingDisplayName').value = settings.displayName || merchantObj.username || '';
+                document.getElementById('settingAvatar').value = avatar;
+
+                const preview = document.getElementById('currentAvatarPreview');
+                if (preview && avatar) {
+                    // Estilização Premium Profissional
+                    preview.style.width = '100px';
+                    preview.style.height = '100px';
+                    preview.style.borderRadius = '50%';
+                    preview.style.overflow = 'hidden';
+                    preview.style.border = '2px solid var(--primary-color)';
+                    preview.style.display = 'flex';
+                    preview.style.justifyContent = 'center';
+                    preview.style.alignItems = 'center';
+                    preview.style.background = '#1a1a1a';
+                    preview.style.boxShadow = '0 0 15px rgba(0, 123, 255, 0.2)';
+
+                    if (isPDF) {
+                        const canvas = document.createElement('canvas');
+                        canvas.style.width = '100%';
+                        canvas.style.height = '100%';
+                        canvas.style.objectFit = 'cover';
+                        preview.innerHTML = '';
+                        preview.appendChild(canvas);
+
+                        const loadingTask = pdfjsLib.getDocument(avatar);
+                        loadingTask.promise.then(function(pdf) {
+                            return pdf.getPage(1);
+                        }).then(function(page) {
+                            const viewport = page.getViewport({ scale: 2.0 });
+                            canvas.width = viewport.width;
+                            canvas.height = viewport.height;
+                            
+                            const renderContext = {
+                                canvasContext: canvas.getContext('2d'),
+                                viewport: viewport
+                            };
+                            page.render(renderContext);
+                        }).catch(function(err) {
+                            console.error('Erro ao renderizar preview PDF via pdf.js:', err);
+                            preview.innerHTML = `<object data="${avatar}" type="application/pdf" style="width:105%; height:105%; object-fit:cover; pointer-events:auto;"></object>`;
+                        });
+                    } else {
+                        preview.innerHTML = `<img src="${avatar}" style="width:100%; height:100%; object-fit:cover;">`;
+                    }
+                }
+
+                document.getElementById('settingAddress').value = settings.address || '';
+                document.getElementById('settingPhrase').value = settings.phrase || '';
+
+                if (settings.displayName) document.querySelector('nav h2').textContent = settings.displayName;
+                if (avatar) {
+                    const navContainer = document.getElementById('navAvatarContainer');
+                    if (navContainer) {
+                        navContainer.style.display = 'flex';
+                        navContainer.style.justifyContent = 'center';
+                        navContainer.style.alignItems = 'center';
+                        navContainer.style.borderRadius = '50%';
+                        navContainer.style.overflow = 'hidden';
+                        navContainer.style.width = '40px'; // Tamanho padrão da nav
+                        navContainer.style.height = '40px';
+
+                        if (isPDF) {
+                            const canvas = document.createElement('canvas');
+                            canvas.style.width = '100%';
+                            canvas.style.height = '100%';
+                            canvas.style.objectFit = 'cover';
+                            navContainer.innerHTML = '';
+                            navContainer.appendChild(canvas);
+
+                            const loadingTask = pdfjsLib.getDocument(avatar);
+                            loadingTask.promise.then(function(pdf) {
+                                return pdf.getPage(1);
+                            }).then(function(page) {
+                                const viewport = page.getViewport({ scale: 2.0 });
+                                canvas.width = viewport.width;
+                                canvas.height = viewport.height;
+                                
+                                const renderContext = {
+                                    canvasContext: canvas.getContext('2d'),
+                                    viewport: viewport
+                                };
+                                page.render(renderContext);
+                            }).catch(function(err) {
+                                console.error('Erro ao renderizar nav PDF via pdf.js:', err);
+                                navContainer.innerHTML = `<object data="${avatar}" type="application/pdf" style="width:100%; height:100%; object-fit:cover; pointer-events:auto;"></object>`;
+                            });
+                        } else {
+                            navContainer.innerHTML = `<img src="${avatar}" style="width: 100%; height: 100%; object-fit: cover;">`;
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Erro ao carregar configurações', err);
+            }
+        }
+
+        document.getElementById('settingsForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const displayName = document.getElementById('settingDisplayName').value;
+            const address = document.getElementById('settingAddress').value;
+            const phrase = document.getElementById('settingPhrase').value;
+
+            const fileInput = document.getElementById('settingAvatarFile');
+            if (fileInput.files && fileInput.files[0]) {
+                const file = fileInput.files[0];
+
+                // Vercel strict limit is 4.5MB for request bodies.
+                // Using binary upload (FormData) avoids Base64 overhead, 
+                // so we can allow up to 4MB safely.
+                const MAX_FILE_SIZE = 4 * 1024 * 1024; 
+                if (file.size > MAX_FILE_SIZE) {
+                    alert('Arquivo muito grande! O limite para o logo (inclusive PDF) é de 4MB.');
+                    return;
+                }
+            }
+
+            // Coletar array de schedules
+            const schedule = {};
+            for (let i = 0; i < 7; i++) {
+                const isOpen = document.getElementById(`isOpen_${i}`).checked;
+                const workStart = document.getElementById(`workStart_${i}`).value;
+                const workEnd = document.getElementById(`workEnd_${i}`).value;
+                const lunchStart = document.getElementById(`lunchStart_${i}`).value;
+                const lunchEnd = document.getElementById(`lunchEnd_${i}`).value;
+
+                schedule[i] = { isOpen, workStart, workEnd, lunchStart, lunchEnd };
+            }
+
+            try {
+                // 1. Upload do Asset (Logo) se houver arquivo novo
+                if (fileInput.files && fileInput.files[0]) {
+                    const formData = new FormData();
+                    formData.append('file', fileInput.files[0]);
+
+                    const assetRes = await fetch(`/api/merchants/${merchantId}/assets/logo`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    if (!assetRes.ok) {
+                        const errorData = await assetRes.json();
+                        throw new Error(errorData.error || 'Erro ao enviar logo');
+                    }
+                }
+
+                // 2. Salvar o restante das configurações
+                // Enviamos o avatar como string vazia ou pequena referência no JSON principal
+                // para não estourar o limite do corpo da requisição (Vercel)
+                const res = await fetch(`/api/merchants/${merchantId}/settings`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        displayName,
+                        avatar: '', // O logo agora é buscado via Assets API
+                        address,
+                        phrase,
+                        schedule
+                    })
+                });
+
+                if (!res.ok) {
+                    const errorMsg = await res.json().catch(() => ({}));
+                    alert('Erro ao salvar as configurações: ' + (errorMsg.error || `Status ${res.status}`));
+                    return;
+                }
+
+                alert('Configurações salvas com sucesso!');
+                // Atualiza visualmente
+                loadSettings();
+            } catch (err) {
+                console.error(err);
+                alert('Erro ao comunicar com o servidor para salvar configurações.');
+            }
+        });
+
+        // Chamar logo ao abrir
+        loadSettings();
+        loadServices(); // Adicionado para carregar a lista de serviços
+
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://npmcdn.com/flatpickr/dist/l10n/pt.js"></script>
+    <script>
+        flatpickr("#planStart", {
+            enableTime: true,
+            dateFormat: "Y-m-d\\TH:i",
+            locale: "pt"
+        });
+        flatpickr("#editApptStart", {
+            enableTime: true,
+            dateFormat: "Y-m-d\\TH:i",
+            locale: "pt"
+        });
+
+        // Relógio em tempo real: atualiza o elemento com id 'nowISO' a cada segundo
+        (function () {
+            const el = document.getElementById('nowISO');
+            if (!el) return;
+
+            function updateNow() {
+                const now = new Date();
+                el.textContent = now.toLocaleString('pt-BR');
+                el.title = now.toISOString();
+            }
+
+            updateNow();
+            let intervalId = setInterval(updateNow, 1000);
+
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) {
+                    clearInterval(intervalId);
+                    intervalId = null;
+                } else if (!intervalId) {
+                    updateNow();
+                    intervalId = setInterval(updateNow, 1000);
+                }
+            });
+
+            window.addEventListener('beforeunload', () => {
+                if (intervalId) clearInterval(intervalId);
+            });
+        })();
+    </script>
+    <script src="js/theme.js"></script>
+</body>
+
+</html>
