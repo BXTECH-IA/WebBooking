@@ -8,11 +8,42 @@
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
     <link rel="stylesheet" type="text/css" href="https://npmcdn.com/flatpickr/dist/themes/dark.css">
-    <!-- PDF.js para renderizar logos PDF como imagem -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     </script>
+    <!-- FullCalendar 6 -->
+    <script src='https://cdn.jsdelivr.net/npm/fullcalendar@6.1.10/index.global.min.js'></script>
+    <style>
+        :root {
+            --fc-border-color: #333;
+            --fc-daygrid-event-dot-width: 5px;
+        }
+        .dark {
+            --fc-page-bg-color: #1a1a1a;
+            --fc-button-bg-color: #333;
+            --fc-button-border-color: #444;
+            --fc-button-hover-bg-color: #444;
+            --fc-button-active-bg-color: var(--primary-color);
+            --fc-event-bg-color: var(--primary-color);
+            --fc-event-border-color: var(--primary-color);
+            --fc-today-bg-color: rgba(0, 255, 136, 0.05);
+            --fc-list-event-hover-bg-color: #222;
+        }
+        #fullCalendarContainer {
+            background-color: var(--card-bg);
+            color: var(--text-color);
+        }
+        .fc .fc-toolbar-title {
+            font-size: 1.2rem;
+            color: var(--text-color);
+        }
+        .fc .fc-col-header-cell-cushion, 
+        .fc .fc-timegrid-slot-label-cushion {
+            color: var(--text-muted);
+            text-transform: capitalize;
+        }
+    </style>
 </head>
 
 <body>
@@ -144,6 +175,8 @@
                 Clientes</button>
             <button id="btn-tab-finance" class="tab-btn" onclick="switchTab('finance')"
                 style="background: transparent; color: var(--text-muted); border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; white-space: nowrap;">Financeiro</button>
+            <button id="btn-tab-agenda" class="tab-btn" onclick="switchTab('agenda')"
+                style="background: transparent; color: var(--text-muted); border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: bold; white-space: nowrap;">📅 Agenda</button>
         </div>
 
         <div id="tab-overview" class="tab-content">
@@ -260,6 +293,13 @@
             </div>
         </div>
     </div> <!-- Fim de tab-overview -->
+
+    <!-- Aba: Agenda (Estilo Google) -->
+    <div id="tab-agenda" class="tab-content" style="display: none;">
+        <div class="card" style="padding: 10px; height: 80vh;">
+            <div id="fullCalendarContainer" style="height: 100%;"></div>
+        </div>
+    </div>
 
     <!-- Aba: Meus Clientes -->
     <div id="tab-clients" class="tab-content" style="display: none;">
@@ -409,6 +449,7 @@
             document.getElementById('tab-overview').style.display = 'none';
             document.getElementById('tab-clients').style.display = 'none';
             document.getElementById('tab-finance').style.display = 'none';
+            document.getElementById('tab-agenda').style.display = 'none';
 
             const btns = document.querySelectorAll('.tab-btn');
             btns.forEach(b => {
@@ -423,6 +464,7 @@
 
             if (tabId === 'clients') loadClientsTab();
             if (tabId === 'finance') loadFinanceTab();
+            if (tabId === 'agenda') initAgenda();
         }
 
         async function loadClientsTab() {
@@ -599,7 +641,103 @@
             if (currentViewedDate && document.getElementById('tab-overview').style.display !== 'none') {
                 loadAppointmentsForDate(currentViewedDate, true);
             }
+            if (calendarInstance && document.getElementById('tab-agenda').style.display !== 'none') {
+                calendarInstance.refetchEvents();
+            }
         }, 15000);
+
+        let calendarInstance = null;
+        async function initAgenda() {
+            if (calendarInstance) {
+                calendarInstance.render();
+                return;
+            }
+
+            const ctx = document.getElementById('fullCalendarContainer');
+            if (!ctx) return;
+
+            // Carregar preferência de visão salva
+            const savedView = localStorage.getItem('calendarDefaultView');
+            const defaultView = savedView || (window.innerWidth < 768 ? 'timeGridDay' : 'timeGridWeek');
+
+            // Carregar configurações para businessHours
+            let businessHours = [];
+            try {
+                const res = await fetch(`/api/merchants/${merchantId}`);
+                const m = await res.json();
+                const sched = m.settings?.schedule;
+                if (sched) {
+                    for (let day in sched) {
+                        if (sched[day].isOpen) {
+                            businessHours.push({
+                                daysOfWeek: [parseInt(day)],
+                                startTime: sched[day].workStart,
+                                endTime: sched[day].workEnd
+                            });
+                        }
+                    }
+                }
+            } catch (e) { console.error(e); }
+
+            calendarInstance = new FullCalendar.Calendar(ctx, {
+                initialView: defaultView,
+                locale: 'pt-br',
+                headerToolbar: {
+                    left: 'prev,next today',
+                    center: 'title',
+                    right: 'timeGridWeek,timeGridDay,dayGridMonth'
+                },
+                buttonText: {
+                    today: 'Hoje',
+                    month: 'Mês',
+                    week: 'Semana',
+                    day: 'Dia'
+                },
+                slotMinTime: '06:00:00',
+                slotMaxTime: '23:00:00',
+                allDaySlot: false,
+                businessHours: businessHours.length ? businessHours : true,
+                nowIndicator: true,
+                editable: false,
+                selectable: false,
+                viewDidMount: function(info) {
+                    // Salva a visão escolhida no localStorage
+                    localStorage.setItem('calendarDefaultView', info.view.type);
+                },
+                datesSet: function(info) {
+                    // Salva a visão escolhida sempre que mudar
+                    localStorage.setItem('calendarDefaultView', info.view.type);
+                },
+                events: async function (info, successCallback, failureCallback) {
+                    try {
+                        const apps = await getAppointments(merchantId, info.start.toISOString(), info.end.toISOString());
+                        const events = apps.map(app => {
+                            let color = '#007bff';
+                            if (app.status === 'cancelled') color = '#dc3545';
+                            if (app.status === 'concluído') color = '#28a745';
+
+                            return {
+                                id: app.id,
+                                title: `${app.client_name} - ${app.service_name || 'Serviço'}`,
+                                start: app.start_time,
+                                end: app.end_time,
+                                color: color,
+                                extendedProps: { ...app }
+                            };
+                        });
+                        successCallback(events);
+                    } catch (e) {
+                        console.error(e);
+                        failureCallback(e);
+                    }
+                },
+                eventClick: function (info) {
+                    openEditApptModal(info.event.extendedProps);
+                }
+            });
+
+            calendarInstance.render();
+        }
 
         async function loadAppointmentsForDate(date, isSilent = false) {
             const list = document.getElementById('appointmentsList');
