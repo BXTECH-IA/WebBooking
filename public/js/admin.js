@@ -108,7 +108,7 @@ document.getElementById('createMerchantForm').addEventListener('submit', async (
  */
 async function deleteMerchant(id, username) {
     if (username === 'master') {
-        alert('Você não pode excluir o usuário master!');
+        showToast('Você não pode excluir o usuário master!', 'error');
         return;
     }
 
@@ -119,14 +119,14 @@ async function deleteMerchant(id, username) {
             });
 
             if (response.ok) {
-                alert(`Comerciante ${username} excluído com sucesso.`);
+                showToast(`Comerciante ${username} excluído com sucesso.`);
                 loadMerchants();
             } else {
                 const data = await response.json();
-                alert(`Erro ao excluir: ${data.error || 'desconhecido'}`);
+                showToast(`Erro ao excluir: ${data.error || 'desconhecido'}`, 'error');
             }
         } catch (err) {
-            alert('Falha ao conectar com o servidor para excluir.');
+            showToast('Falha ao conectar com o servidor para excluir.', 'error');
         }
     }
 }

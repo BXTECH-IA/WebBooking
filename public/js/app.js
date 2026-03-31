@@ -64,3 +64,40 @@ function togglePasswordVisibility(btn) {
         btn.innerHTML = eyeIcon;
     }
 }
+
+/**
+ * Exibe uma notificação elegante (Toast)
+ * @param {string} message 
+ * @param {'success'|'error'|'info'} type 
+ * @param {number} duration 
+ */
+window.showToast = function(message, type = 'success', duration = 3500) {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    
+    // Ícones simples para cada tipo
+    let icon = '✅';
+    if (type === 'error') icon = '❌';
+    if (type === 'info') icon = 'ℹ️';
+
+    toast.innerHTML = `<span>${icon}</span> <span>${message}</span>`;
+    container.appendChild(toast);
+
+    // Remove após a duração
+    setTimeout(() => {
+        toast.classList.add('fade-out');
+        setTimeout(() => {
+            if (toast.parentNode) {
+                container.removeChild(toast);
+            }
+        }, 300);
+    }, duration);
+};
+

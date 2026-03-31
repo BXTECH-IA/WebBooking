@@ -74,7 +74,7 @@
             <div
                 style="display: flex; gap: 15px; color: var(--text-muted); font-size: 0.9rem; border-right: 1px solid #333; padding-right: 20px;">
                 <div style="display: flex; align-items: center; gap: 5px;">
-                    <span>📍</span> <span>Local: Seu Endereço</span>
+                    <span>📍</span> <span id="navAddress">Local: Seu Endereço</span>
                 </div>
                 <div style="display: flex; align-items: center; gap: 5px;">
                     <span>🌐</span> <span id="nowISO">carregando...</span>
@@ -413,7 +413,7 @@
 
                 if (res.ok) {
                     closeEditClientModal();
-                    alert('Perfil do cliente atualizado!');
+                    showToast('Perfil do cliente atualizado!');
                     loadClientsTab(); // Recarrega a tabela de clientes
                 } else {
                     const data = await res.json();
@@ -433,14 +433,14 @@
             linkInput.setSelectionRange(0, 99999); // Mobile compatibility
             try {
                 navigator.clipboard.writeText(linkInput.value).then(() => {
-                    alert('Link copiado! Envie este link aos seus clientes.');
+                    showToast('Link copiado! Envie este link aos seus clientes.');
                 }).catch(err => {
                     document.execCommand('copy');
-                    alert('Link copiado (execCommand)!');
+                    showToast('Link copiado!');
                 });
             } catch (e) {
                 document.execCommand('copy');
-                alert('Link copiado (fallback)!');
+                showToast('Link copiado!');
             }
         }
 
@@ -839,15 +839,15 @@
 
             // Validações básicas
             if (!name || isNaN(duration) || isNaN(price)) {
-                alert('Preencha nome, duração (minutos) e preço corretamente.');
+                showToast('Preencha nome, duração e preço corretamente.', 'error');
                 return;
             }
             if (duration < 5) {
-                alert('Duração mínima do serviço é 5 minutos.');
+                showToast('Duração mínima do serviço é 5 minutos.', 'error');
                 return;
             }
             if (price <= 0) {
-                alert('O preço deve ser maior que 0.');
+                showToast('O preço deve ser maior que 0.', 'error');
                 return;
             }
 
@@ -860,7 +860,7 @@
                 document.getElementById('addServiceForm').reset();
                 loadServices();
             } catch (err) {
-                alert('Erro ao adicionar serviço');
+                showToast('Erro ao adicionar serviço', 'error');
             }
         });
 
@@ -882,11 +882,11 @@
                 const res = await fetch(`/api/services/${merchantId}`);
                 const services = await res.json();
                 const svc = services.find(s => s.id === id);
-                if (!svc) return alert('Serviço não encontrado');
+                if (!svc) return showToast('Serviço não encontrado', 'error');
                 openEditServiceModal(svc);
             } catch (err) {
                 console.error(err);
-                alert('Erro ao abrir editor de serviço');
+                showToast('Erro ao abrir editor de serviço', 'error');
             }
         }
 
@@ -909,11 +909,11 @@
             const price = parseFloat(document.getElementById('editServicePrice').value);
 
             if (!name || isNaN(duration) || isNaN(price)) {
-                alert('Preencha nome, duração e preço corretamente.');
+                showToast('Preencha nome, duração e preço corretamente.', 'error');
                 return;
             }
-            if (duration < 5) return alert('Duração mínima é 5 minutos');
-            if (price <= 0) return alert('Preço deve ser maior que 0');
+            if (duration < 5) return showToast('Duração mínima é 5 minutos', 'error');
+            if (price <= 0) return showToast('Preço deve ser maior que 0', 'error');
 
             try {
                 await fetch(`/api/services/${editingServiceId}`, {
@@ -925,7 +925,7 @@
                 loadServices();
             } catch (err) {
                 console.error(err);
-                alert('Erro ao salvar serviço');
+                showToast('Erro ao salvar serviço', 'error');
             }
         });
 
@@ -946,13 +946,13 @@
                 const res = await fetch(`/api/services/${id}`, { method: 'DELETE' });
                 if (!res.ok) {
                     const data = await res.json().catch(() => ({}));
-                    alert('Erro ao deletar serviço: ' + (data.error || `Status ${res.status}`));
+                    showToast('Erro ao deletar serviço: ' + (data.error || `Status ${res.status}`), 'error');
                     return;
                 }
                 loadServices();
             } catch (err) {
                 console.error(err);
-                alert('Erro ao comunicar com o servidor ao deletar serviço.');
+                showToast('Erro ao comunicar com o servidor ao deletar serviço.', 'error');
             }
         }
 
@@ -985,15 +985,15 @@
 
                 if (!res.ok) {
                     const data = await res.json();
-                    alert(data.error || 'Erro ao criar plano fixo!');
+                    showToast(data.error || 'Erro ao criar plano fixo!', 'error');
                     return;
                 }
 
-                alert('Plano fixo de 4 semanas criado com sucesso!');
+                showToast('Plano fixo de 4 semanas criado com sucesso!');
                 document.getElementById('fixedPlanForm').reset();
                 loadAppointmentsForDate(new Date());
             } catch (err) {
-                alert('Erro na comunicação com o servidor ao criar plano');
+                showToast('Erro na comunicação com o servidor ao criar plano', 'error');
             }
         });
 
@@ -1045,7 +1045,7 @@
                 });
 
                 if (!res.ok) {
-                    alert('Erro ao atualizar agendamento');
+                    showToast('Erro ao atualizar agendamento', 'error');
                     return;
                 }
 
@@ -1053,7 +1053,7 @@
                 loadAppointmentsForDate(new Date()); // reload list
             } catch (err) {
                 console.error(err);
-                alert('Erro ao comunicar com o servidor para editar agendamento.');
+                showToast('Erro ao comunicar com o servidor para editar agendamento.', 'error');
             }
         });
 
@@ -1223,6 +1223,13 @@
                 }
 
                 document.getElementById('settingAddress').value = settings.address || '';
+                
+                // Atualiza o endereço no navbar
+                const navAddress = document.getElementById('navAddress');
+                if (navAddress) {
+                    navAddress.textContent = settings.address ? `Local: ${settings.address}` : 'Local: Seu Endereço';
+                }
+
                 document.getElementById('settingPhrase').value = settings.phrase || '';
 
                 if (settings.displayName) document.querySelector('nav h2').textContent = settings.displayName;
@@ -1287,7 +1294,7 @@
                 // so we can allow up to 4MB safely.
                 const MAX_FILE_SIZE = 4 * 1024 * 1024; 
                 if (file.size > MAX_FILE_SIZE) {
-                    alert('Arquivo muito grande! O limite para o logo (inclusive PDF) é de 4MB.');
+                    showToast('Arquivo muito grande! (Limite 4MB)', 'error');
                     return;
                 }
             }
@@ -1338,16 +1345,16 @@
 
                 if (!res.ok) {
                     const errorMsg = await res.json().catch(() => ({}));
-                    alert('Erro ao salvar as configurações: ' + (errorMsg.error || `Status ${res.status}`));
+                    showToast('Erro ao salvar as configurações: ' + (errorMsg.error || `Status ${res.status}`), 'error');
                     return;
                 }
 
-                alert('Configurações salvas com sucesso!');
+                showToast('Configurações salvas com sucesso!');
                 // Atualiza visualmente
                 loadSettings();
             } catch (err) {
                 console.error(err);
-                alert('Erro ao comunicar com o servidor para salvar configurações.');
+                showToast('Erro ao comunicar com o servidor para salvar configurações.', 'error');
             }
         });
 

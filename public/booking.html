@@ -482,8 +482,8 @@
             const slot = window.selectedSlot;
             try {
                 const res = await createAppointment({ merchantId, client_name: name, client_phone: phone, service_id: currentService.id, start_time: slot.start.toISOString(), end_time: slot.end.toISOString() });
-                if (res.error) alert('Erro: ' + res.error); else { alert('Agendamento realizado com sucesso!'); location.reload(); }
-            } catch (err) { alert('Erro ao agendar.'); }
+                if (res.error) showToast('Erro: ' + res.error, 'error'); else { showToast('Agendamento realizado com sucesso!'); setTimeout(() => location.reload(), 1500); }
+            } catch (err) { showToast('Erro ao agendar.', 'error'); }
         });
     </script>
 
