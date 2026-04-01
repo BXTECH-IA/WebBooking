@@ -134,7 +134,7 @@ router.delete('/:id', async (req, res) => {
     const { id } = req.params;
     try {
         const result = await pool.query(
-            "UPDATE appointments SET status = 'cancelled' WHERE id = $1 RETURNING *",
+            "UPDATE appointments SET status = 'cancelled', cancellation_reason = 'Excluido Pelo Proprietário' WHERE id = $1 RETURNING *",
             [id]
         );
 
@@ -148,9 +148,10 @@ router.delete('/:id', async (req, res) => {
         const merchantRes = await pool.query('SELECT settings FROM merchants WHERE id = $1', [cancelledAppt.merchant_id]);
         const merchantSettings = merchantRes.rows[0]?.settings;
 
+        // Disparar Webhook com a nova informação inclusive
         triggerWebhook('appointment_cancelled', cancelledAppt, merchantSettings);
 
-        res.json({ message: 'Agendamento cancelado', appointment: cancelledAppt });
+        res.json({ message: 'Agendamento cancelado pelo proprietário', appointment: cancelledAppt });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Erro no servidor' });
@@ -204,6 +205,74 @@ router.post('/fixed-plan', async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Erro no servidor ao criar plano fixo' });
+    }
+});
+
+// Buscar agendamento ativo por cliente (para reagendamento/cancelamento)
+router.post('/find-active', async (req, res) => {
+    const { merchantId, client_name, client_phone } = req.body;
+
+    if (!merchantId || !client_name || !client_phone) {
+        return res.status(400).json({ error: 'Campos obrigatórios ausentes' });
+    }
+
+    try {
+        // Busca o agendamento futuro mais próximo que não esteja cancelado
+        const result = await pool.query(
+            `SELECT a.*, s.name as service_name 
+             FROM appointments a 
+             LEFT JOIN services s ON a.service_id = s.id 
+             WHERE a.merchant_id = $1 
+             AND LOWER(a.client_name) = LOWER($2) 
+             AND a.client_phone = $3 
+             AND a.status = 'scheduled' 
+             AND a.start_time > NOW() 
+             ORDER BY a.start_time ASC 
+             LIMIT 1`,
+            [merchantId, client_name, client_phone]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Nenhum agendamento futuro encontrado para este nome e telefone' });
+        }
+
+        res.json(result.rows[0]);
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Erro ao buscar agendamento' });
+    }
+});
+
+// Cancelar agendamento (pelo cliente)
+router.post('/cancel-client', async (req, res) => {
+    const { appointmentId } = req.body;
+
+    if (!appointmentId) {
+        return res.status(400).json({ error: 'ID do agendamento é obrigatório' });
+    }
+
+    try {
+        const result = await pool.query(
+            "UPDATE appointments SET status = 'cancelled', cancellation_reason = 'Cancelado Pelo Cliente' WHERE id = $1 RETURNING *",
+            [appointmentId]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Agendamento não encontrado' });
+        }
+
+        const cancelledAppt = result.rows[0];
+
+        // Buscar configurações do comerciante
+        const merchantRes = await pool.query('SELECT settings FROM merchants WHERE id = $1', [cancelledAppt.merchant_id]);
+        const merchantSettings = merchantRes.rows[0]?.settings;
+
+        triggerWebhook('appointment_cancelled', cancelledAppt, merchantSettings);
+
+        res.json({ message: 'Agendamento cancelado com sucesso', appointment: cancelledAppt });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: 'Erro ao cancelar agendamento' });
     }
 });
 

@@ -243,9 +243,55 @@ select:focus {
 .calendar-section {
     background-color: var(--card-bg);
     border-radius: 16px;
-    padding: 30px;
     display: flex;
     flex-direction: column;
+}
+
+.welcome-options {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 10px;
+}
+
+.mode-card {
+    padding: 20px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 15px;
+    font-weight: 700;
+    font-size: 1.1rem;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    border: 2px solid transparent;
+}
+
+.mode-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+}
+
+.mode-card.primary {
+    background: var(--primary-color);
+    color: var(--selected-text);
+}
+
+.mode-card.secondary {
+    background: var(--input-bg);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+.mode-card.danger {
+    background: transparent;
+    color: var(--danger-color);
+    border-color: var(--danger-color);
+}
+
+.mode-card.danger:hover {
+    background: rgba(255, 77, 77, 0.05);
 }
 
 .calendar-header {

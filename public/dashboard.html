@@ -138,10 +138,14 @@
                     <option value="cancelled">Cancelado</option>
                 </select>
 
-                <div style="display:flex; gap:10px; margin-top:16px;">
-                    <button id="saveEditAppt" type="submit" style="flex:1;">Salvar Alterações</button>
-                    <button type="button" onclick="closeEditApptModal()"
-                        style="flex:1; background:var(--border-color); color:var(--text-color);">Cancelar</button>
+                <div style="display:flex; flex-direction:column; gap:10px; margin-top:16px;">
+                    <div style="display:flex; gap:10px;">
+                        <button id="saveEditAppt" type="submit" style="flex:1;">Salvar Alterações</button>
+                        <button type="button" onclick="closeEditApptModal()"
+                            style="flex:1; background:var(--border-color); color:var(--text-color);">Cancelar</button>
+                    </div>
+                    <button type="button" onclick="deleteAppointmentFromModal()"
+                        style="width: 100%; padding: 10px; background: transparent; color: var(--danger-color); border: 1px solid var(--danger-color); border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 5px;">🗑️ Excluir Agendamento</button>
                 </div>
             </form>
         </div>
@@ -241,7 +245,29 @@
                     </div>
 
                     <div class="card">
-                        <h3>Configurações da Página</h3>
+                        <h3>Bloquear Horário/Dia</h3>
+                        <form id="blockScheduleForm">
+                            <label
+                                style="font-size: 0.85em; color: var(--text-muted); display: block; margin-bottom: 5px;">Data e Hora de Início</label>
+                            <input type="text" id="blockStart" placeholder="Início do bloqueio" required
+                                style="margin-bottom:8px;">
+                            
+                            <label
+                                style="font-size: 0.85em; color: var(--text-muted); display: block; margin-bottom: 5px;">Data e Hora de Fim</label>
+                            <input type="text" id="blockEnd" placeholder="Fim do bloqueio" required
+                                style="margin-bottom:8px;">
+
+                            <button type="submit"
+                                style="width: 100%; background-color: var(--danger-color); color: var(--text-color);">Bloquear Horário</button>
+                        </form>
+
+                        <div id="blockedSlotsList"
+                            style="margin-top: 20px; display: flex; flex-direction: column; gap: 10px;">
+                            <!-- Bloqueios serão listados aqui -->
+                        </div>
+                    </div>
+
+                    <div class="card">
                         <form id="settingsForm">
                             <p class="section-description">Personalize a aparência da sua página de agendamentos.</p>
                 
@@ -748,14 +774,41 @@
                 const startOfDay = new Date(dateStr + 'T00:00:00').toISOString();
                 const endOfDay = new Date(dateStr + 'T23:59:59').toISOString();
 
-                const apps = await getAppointments(merchantId, startOfDay, endOfDay);
+                // Busca agendamentos e bloqueios simultaneamente
+                const [apps, availability] = await Promise.all([
+                    getAppointments(merchantId, startOfDay, endOfDay),
+                    fetch(`/api/availability/${merchantId}`).then(r => r.json())
+                ]);
 
-                if (apps.length === 0) {
+                // Filtra bloqueios para o dia selecionado
+                const blocked = (availability.blocked || []).filter(b => {
+                    const bStart = new Date(b.start_time).toISOString().split('T')[0];
+                    return bStart === dateStr;
+                });
+
+                if (apps.length === 0 && blocked.length === 0) {
                     list.innerHTML = '<p>Nenhum agendamento para este dia.</p>';
                     return;
                 }
 
-                list.innerHTML = apps.map(app => {
+                let html = '';
+
+                // Renderiza bloqueios primeiro ou misturado (aqui mostraremos no topo)
+                blocked.forEach(b => {
+                    html += `
+                    <div class="time-slot" style="display: flex; justify-content: space-between; align-items: center; text-align: left; cursor: default; background: rgba(220, 53, 69, 0.05); border-left: 5px solid var(--danger-color);">
+                        <div>
+                            <strong style="color: var(--danger-color);">${new Date(b.start_time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong> - <span style="color: var(--danger-color); font-weight: bold;">HORÁRIO BLOQUEADO</span><br>
+                            <span style="font-size: 0.85rem; color: var(--text-muted);">Até ${new Date(b.end_time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                        <div>
+                            <button onclick="deleteBlock(${b.id})" style="padding: 4px 8px; font-size: 0.8rem; background-color: var(--card-bg); color: var(--danger-color); border: 1px solid var(--danger-color); border-radius: 4px; cursor: pointer;">Remover</button>
+                        </div>
+                    </div>
+                `;
+                });
+
+                html += apps.map(app => {
                     let statusColor = 'var(--primary-color)';
                     let statusLabel = 'Agendado';
                     if (app.status === 'cancelled') {
@@ -777,12 +830,15 @@
                             <strong>${new Date(app.start_time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</strong> - ${app.client_name} ${renewalBadge}<br>
                             <span style="font-size: 0.85rem; color: var(--text-muted);">${app.client_phone}</span>${serviceNameLine}
                         </div>
-                        <div style="display: flex; gap: 10px; align-items: center;">
-                            <span style="color: ${statusColor}; font-weight: bold;">${statusLabel}</span>
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <span style="color: ${statusColor}; font-weight: bold; margin-right: 5px;">${statusLabel}</span>
                             <button onclick='openEditApptModal(${JSON.stringify(app).replace(/'/g, "&#39;")})' style="padding: 4px 8px; font-size: 0.8rem; background-color: var(--card-bg); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer;">Editar</button>
+                            <button onclick="deleteAppointment(${app.id})" style="padding: 4px 8px; font-size: 0.8rem; background-color: var(--card-bg); color: var(--danger-color); border: 1px solid var(--danger-color); border-radius: 4px; cursor: pointer;">🗑️</button>
                         </div>
                     </div>
                 `}).join('');
+
+                list.innerHTML = html;
             } catch (err) {
                 list.innerHTML = '<p>Erro ao carregar agendamentos.</p>';
             }
@@ -1361,6 +1417,121 @@
         // Chamar logo ao abrir
         loadSettings();
         loadServices(); // Adicionado para carregar a lista de serviços
+        loadBlockedSlots();
+
+        // ================= Bloqueio de Horários =================
+        async function loadBlockedSlots() {
+            const list = document.getElementById('blockedSlotsList');
+            list.innerHTML = '<p style="font-size: 0.85em; color: var(--text-muted);">Carregando bloqueios...</p>';
+            try {
+                const res = await fetch(`/api/availability/${merchantId}`);
+                const data = await res.json();
+                const blocked = data.blocked || [];
+
+                if (blocked.length === 0) {
+                    list.innerHTML = '<p style="font-size: 0.85em; color: var(--text-muted);">Nenhum horário bloqueado.</p>';
+                    return;
+                }
+
+                list.innerHTML = blocked.map(b => {
+                    const start = new Date(b.start_time);
+                    const end = new Date(b.end_time);
+                    return `
+                        <div style="background: rgba(220, 53, 69, 0.1); border: 1px solid var(--danger-color); padding: 10px; border-radius: 8px; display: flex; justify-content: space-between; align-items: center;">
+                            <div style="font-size: 0.85em;">
+                                <strong>${start.toLocaleDateString('pt-BR')}</strong><br>
+                                ${start.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })} até ${end.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                            <button onclick="deleteBlock(${b.id})" style="background: transparent; color: var(--danger-color); border: none; cursor: pointer; padding: 5px;">🗑️</button>
+                        </div>
+                    `;
+                }).join('');
+            } catch (err) {
+                list.innerHTML = '<p>Erro ao carregar bloqueios.</p>';
+            }
+        }
+
+        document.getElementById('blockScheduleForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const start_time = document.getElementById('blockStart').value;
+            const end_time = document.getElementById('blockEnd').value;
+
+            if (!start_time || !end_time) {
+                showToast('Selecione os horários de início e fim.', 'error');
+                return;
+            }
+
+            try {
+                const res = await fetch(`/api/availability/${merchantId}/block`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        start_time: new Date(start_time).toISOString(),
+                        end_time: new Date(end_time).toISOString(),
+                        type: 'slot'
+                    })
+                });
+
+                if (!res.ok) {
+                    const data = await res.json();
+                    showToast(data.error || 'Erro ao bloquear horário', 'error');
+                    return;
+                }
+
+                showToast('Horário bloqueado com sucesso!');
+                document.getElementById('blockScheduleForm').reset();
+                loadBlockedSlots();
+                loadAppointmentsForDate(currentViewedDate || new Date());
+            } catch (err) {
+                showToast('Erro ao bloquear horário', 'error');
+            }
+        });
+
+        window.deleteBlock = async function (id) {
+            if (!confirm('Deseja remover este bloqueio?')) return;
+            try {
+                const res = await fetch(`/api/availability/block/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    showToast('Bloqueio removido!');
+                    loadBlockedSlots();
+                    loadAppointmentsForDate(currentViewedDate || new Date());
+                } else {
+                    showToast('Erro ao remover bloqueio', 'error');
+                }
+            } catch (err) {
+                showToast('Erro ao remover bloqueio', 'error');
+            }
+        }
+
+        // --- Appointment Deletion Logic ---
+        window.deleteAppointment = async function (id) {
+            if (!confirm('Tem certeza que deseja excluir este agendamento?')) return;
+
+            try {
+                const res = await fetch(`/api/appointments/${id}`, {
+                    method: 'DELETE'
+                });
+
+                if (res.ok) {
+                    showToast('Agendamento excluído pelo proprietário!');
+                    // Recarregar dados
+                    if (currentViewedDate) loadAppointmentsForDate(currentViewedDate);
+                    if (calendarInstance) calendarInstance.refetchEvents();
+                } else {
+                    const data = await res.json();
+                    showToast(data.error || 'Erro ao excluir agendamento', 'error');
+                }
+            } catch (err) {
+                showToast('Erro de conexão ao excluir agendamento', 'error');
+            }
+        };
+
+        window.deleteAppointmentFromModal = function () {
+            const id = document.getElementById('editApptId').value;
+            if (!id) return;
+            deleteAppointment(id);
+            closeEditApptModal();
+        };
 
     </script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
@@ -1372,6 +1543,16 @@
             locale: "pt"
         });
         flatpickr("#editApptStart", {
+            enableTime: true,
+            dateFormat: "Y-m-d\\TH:i",
+            locale: "pt"
+        });
+        flatpickr("#blockStart", {
+            enableTime: true,
+            dateFormat: "Y-m-d\\TH:i",
+            locale: "pt"
+        });
+        flatpickr("#blockEnd", {
             enableTime: true,
             dateFormat: "Y-m-d\\TH:i",
             locale: "pt"

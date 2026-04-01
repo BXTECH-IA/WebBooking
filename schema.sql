@@ -11,9 +11,12 @@ CREATE TABLE IF NOT EXISTS appointments (
     merchant_id INTEGER REFERENCES merchants(id),
     client_name VARCHAR(255) NOT NULL,
     client_phone VARCHAR(50) NOT NULL,
+    service_id INTEGER REFERENCES services(id),
     start_time TIMESTAMPTZ NOT NULL,
     end_time TIMESTAMPTZ NOT NULL,
-    status VARCHAR(50) DEFAULT 'scheduled', -- agendado, concluído, cancelado
+    status VARCHAR(50) DEFAULT 'scheduled', -- scheduled, concluído, cancelled
+    is_plan_renewal BOOLEAN DEFAULT FALSE,
+    cancellation_reason TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 

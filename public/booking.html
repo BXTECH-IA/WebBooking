@@ -29,7 +29,7 @@
                     style="width: 100%; height: 100%; object-fit: cover; margin: 0;">
             </div>
             <div>
-                <h3 style="margin-bottom: 10px; font-size: 2.2rem; font-weight: 800; background: linear-gradient(to right, var(--text-color), var(--primary-color)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">Nome da Empresa</h3>
+                <h3 style="margin-bottom: 10px; font-size: 2.2rem; font-weight: 800; background: linear-gradient(to right, var(--text-color), var(--primary-color)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;">Nome da Empresa</h3>
                 <p id="merchantPhrase"
                     style="color: var(--text-muted); font-style: italic; font-size: 1.1em; margin: 0; opacity: 0.9;">"Sua frase de
                     efeito aparecerá aqui."</p>
@@ -234,9 +234,48 @@
         })();
     </script>
 
-    <!-- Coluna do Meio: Seleção de Serviço & Calendário -->
+    <!-- Coluna do Meio: Seleção Inicial, Busca e Agenda -->
     <div class="calendar-section">
-        <div id="serviceSelection"></div>
+        <!-- Seleção de Modo Inicial -->
+        <div id="welcomeSection" style="padding: 20px;">
+            <h2 style="text-align: center; margin-bottom: 5px;">O que você deseja fazer?</h2>
+            <p style="text-align: center; color: var(--text-muted); margin-bottom: 25px;">Escolha uma das opções abaixo para continuar.</p>
+            
+            <div class="welcome-options">
+                <div class="mode-card primary" onclick="setBookingMode('new')">
+                    <span>📅</span> Fazer Novo Agendamento
+                </div>
+                
+                <div class="mode-card secondary" onclick="setBookingMode('reschedule')">
+                    <span>🔄</span> Reagendar Horário
+                </div>
+                
+                <div class="mode-card danger" onclick="setBookingMode('cancel')">
+                    <span>❌</span> Cancelar Horário
+                </div>
+            </div>
+        </div>
+
+        <!-- Busca de Agendamento (para Reagendar/Cancelar) -->
+        <div id="lookupSection" class="hidden card" style="margin-bottom: 20px;">
+            <h3 id="lookupTitle">Localizar Agendamento</h3>
+            <p id="lookupDescription" style="font-size: 0.9em; color: var(--text-muted); margin-bottom: 20px;">Informe seus dados cadastrados para encontrar seu horário.</p>
+            
+            <form id="lookupForm">
+                <label style="display: block; margin-bottom: 5px;">Seu Nome</label>
+                <input type="text" id="lookupName" placeholder="Como foi cadastrado" required style="margin-bottom: 15px;">
+
+                <label style="display: block; margin-bottom: 5px;">Seu Telefone (WhatsApp)</label>
+                <input type="tel" id="lookupPhone" placeholder="(XX) 9XXXX-XXXX" required maxlength="15" style="margin-bottom: 20px;">
+
+                <div style="display: flex; gap: 10px;">
+                    <button type="submit" style="flex: 1;">Prosseguir</button>
+                    <button type="button" onclick="backToWelcome()" style="flex: 1; background: var(--border-color); color: var(--text-color);">Voltar</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="serviceSelection" class="hidden"></div>
         <div id="calendarContainer" class="hidden"></div>
     </div>
 
@@ -306,6 +345,98 @@
 
         let currentService = null;
         let currentDate = null;
+        let currentBookingMode = 'new'; // 'new', 'reschedule', 'cancel'
+
+        function setBookingMode(mode) {
+            currentBookingMode = mode;
+            document.getElementById('welcomeSection').classList.add('hidden');
+            
+            if (mode === 'new') {
+                document.getElementById('serviceSelection').classList.remove('hidden');
+                serviceManager.loadServices(merchantId);
+            } else {
+                document.getElementById('lookupSection').classList.remove('hidden');
+                document.getElementById('lookupTitle').textContent = mode === 'reschedule' ? 'Reagendar Horário' : 'Cancelar Horário';
+                document.getElementById('lookupDescription').textContent = mode === 'reschedule' 
+                    ? 'Identifique-se para remover seu horário atual e escolher um novo.' 
+                    : 'Identifique-se para cancelar seu agendamento permanentemente.';
+            }
+        }
+
+        function backToWelcome() {
+            document.getElementById('welcomeSection').classList.remove('hidden');
+            document.getElementById('lookupSection').classList.add('hidden');
+            document.getElementById('serviceSelection').classList.add('hidden');
+            document.getElementById('calendarContainer').classList.add('hidden');
+            document.getElementById('selectedServiceInfo').classList.add('hidden');
+        }
+
+        // Máscara de Telefone para o Lookup
+        document.getElementById('lookupPhone').addEventListener('input', function (e) {
+            let val = e.target.value.replace(/\D/g, '');
+            let x = val.match(/(\d{0,2})(\d{0,1})(\d{0,4})(\d{0,4})/);
+            if (!x) return;
+            if (!x[2]) {
+                e.target.value = x[1];
+            } else {
+                e.target.value = '(' + x[1] + ') ' + x[2] + (x[3] ? x[3] : '') + (x[4] ? '-' + x[4] : '');
+            }
+        });
+
+        document.getElementById('lookupForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const name = document.getElementById('lookupName').value;
+            const phone = document.getElementById('lookupPhone').value;
+
+            try {
+                // 1. Buscar agendamento ativo
+                const findRes = await fetch('/api/appointments/find-active', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ merchantId, client_name: name, client_phone: phone })
+                });
+
+                if (!findRes.ok) {
+                    const errorData = await findRes.json();
+                    showToast(errorData.error || 'Agendamento não encontrado.', 'error');
+                    return;
+                }
+
+                const appointment = await findRes.json();
+
+                // 2. Confirmar ação
+                const confirmMsg = currentBookingMode === 'reschedule' 
+                    ? `Encontramos seu agendamento de ${appointment.service_name} para ${new Date(appointment.start_time).toLocaleString('pt-BR')}. Deseja cancelar este para escolher um novo horário?`
+                    : `Deseja realmente cancelar seu agendamento de ${appointment.service_name} para ${new Date(appointment.start_time).toLocaleString('pt-BR')}?`;
+
+                if (!confirm(confirmMsg)) return;
+
+                // 3. Cancelar agendamento
+                const cancelRes = await fetch('/api/appointments/cancel-client', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ appointmentId: appointment.id })
+                });
+
+                if (cancelRes.ok) {
+                    if (currentBookingMode === 'cancel') {
+                        showToast('Horário cancelado com sucesso!');
+                        setTimeout(() => location.reload(), 2000);
+                    } else {
+                        showToast('Horário anterior removido! Escolha seu novo serviço agora.');
+                        document.getElementById('lookupSection').classList.add('hidden');
+                        document.getElementById('serviceSelection').classList.remove('hidden');
+                        serviceManager.loadServices(merchantId);
+                    }
+                } else {
+                    showToast('Erro ao processar solicitação.', 'error');
+                }
+
+            } catch (err) {
+                console.error(err);
+                showToast('Erro de comunicação com o servidor.', 'error');
+            }
+        });
 
         const serviceManager = new ServiceManager('serviceSelection', (service) => {
             currentService = service;
@@ -346,7 +477,7 @@
             loadSlots(date);
         });
 
-        serviceManager.loadServices(merchantId);
+            // serviceManager.loadServices(merchantId); // Removido do auto-load inicial
 
         async function loadSlots(date) {
             const list = document.getElementById('slotsList');
@@ -371,10 +502,17 @@
                 const dateStr = date.toISOString().split('T')[0];
                 const startOfDay = new Date(dateStr + 'T00:00:00').toISOString();
                 const endOfDay = new Date(dateStr + 'T23:59:59').toISOString();
-                const appointments = await getAppointments(merchantId, startOfDay, endOfDay);
+                
+                // Busca agendamentos e disponibilidade (que inclui bloqueios)
+                const [appointments, availability] = await Promise.all([
+                    getAppointments(merchantId, startOfDay, endOfDay),
+                    getAvailability(merchantId)
+                ]);
 
-                // Geração de slots baseada no day config
-                const slots = generateSlots(date, currentService.duration, appointments, scheduleConfig);
+                const blockedSlots = availability.blocked || [];
+
+                // Geração de slots baseada no day config e bloqueios
+                const slots = generateSlots(date, currentService.duration, appointments, scheduleConfig, blockedSlots);
 
                 list.innerHTML = '';
                 if (slots.length === 0) {
@@ -394,7 +532,7 @@
             }
         }
 
-        function generateSlots(date, durationMinutes, appointments, scheduleConfig) {
+        function generateSlots(date, durationMinutes, appointments, scheduleConfig, blockedSlots = []) {
             const slots = [];
 
             const startStr = scheduleConfig.workStart || "09:00";
@@ -426,17 +564,28 @@
 
                 // Pular se o horário de início for antes de agora
                 if (current < now) {
-                    current = slotEnd;
+                    current = new Date(current.getTime() + 15 * 60000); // Tenta de 15 em 15 min em vez de pular a duração cheia
                     continue;
                 }
 
                 // Verificar intervalo de almoço
                 if (lunchStart && lunchEnd) {
                     if (current < lunchEnd && slotEnd > lunchStart) {
-                        // Se qualquer parte do bloco cair no almoço, pular para o final do almoço
                         current = new Date(lunchEnd);
                         continue;
                     }
+                }
+
+                // Verificar se o slot está em um intervalo bloqueado
+                const isBlocked = blockedSlots.some(b => {
+                    const bStart = new Date(b.start_time);
+                    const bEnd = new Date(b.end_time);
+                    return (current < bEnd && slotEnd > bStart);
+                });
+
+                if (isBlocked) {
+                    current = new Date(current.getTime() + 15 * 60000);
+                    continue;
                 }
 
                 const isBooked = appointments.some(app => {
@@ -444,10 +593,13 @@
                     const appEnd = new Date(app.end_time);
                     return (current < appEnd && slotEnd > appStart);
                 });
+
                 if (!isBooked) {
                     slots.push({ start: new Date(current), end: new Date(slotEnd), timeLabel: current.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) });
+                    current = slotEnd; // Pula a duração do serviço se agendou
+                } else {
+                    current = new Date(current.getTime() + 15 * 60000); // Tenta de 15 em 15 se estiver ocupado
                 }
-                current = slotEnd;
             }
             return slots;
         }
