@@ -12,7 +12,7 @@ router.get('/', async (req, res) => {
     }
 
     try {
-        let query = 'SELECT a.*, s.name as service_name FROM appointments a LEFT JOIN services s ON a.service_id = s.id WHERE a.merchant_id = $1';
+        let query = "SELECT a.*, s.name as service_name FROM appointments a LEFT JOIN services s ON a.service_id = s.id WHERE a.merchant_id = $1 AND a.status != 'cancelled'";
         const params = [merchantId];
         let paramCount = 1;
 
@@ -60,6 +60,15 @@ router.post('/', async (req, res) => {
         if (conflict.rows.length > 0) {
             return res.status(409).json({ error: 'Horário não disponível' });
         }
+
+        // Upsert no perfil do cliente para garantir que os dados permaneçam mesmo após exclusão do agendamento
+        await pool.query(
+          `INSERT INTO client_profiles (merchant_id, name, phone)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (merchant_id, phone) 
+           DO UPDATE SET name = EXCLUDED.name`,
+          [merchantId, client_name, client_phone]
+        );
 
         const result = await pool.query(
             `INSERT INTO appointments (merchant_id, client_name, client_phone, service_id, start_time, end_time)
@@ -129,29 +138,28 @@ router.put('/:id', async (req, res) => {
     }
 });
 
-// Deletar/Cancelar agendamento
+// Deletar agendamento (Exclusão Física)
 router.delete('/:id', async (req, res) => {
     const { id } = req.params;
     try {
-        const result = await pool.query(
-            "UPDATE appointments SET status = 'cancelled', cancellation_reason = 'Excluido Pelo Proprietário' WHERE id = $1 RETURNING *",
-            [id]
-        );
-
-        if (result.rows.length === 0) {
+        // Primeiro buscamos para ter os dados para o webhook antes de deletar
+        const check = await pool.query('SELECT * FROM appointments WHERE id = $1', [id]);
+        if (check.rows.length === 0) {
             return res.status(404).json({ error: 'Agendamento não encontrado' });
         }
+        const apptToDelete = check.rows[0];
 
-        const cancelledAppt = result.rows[0];
+        // Exclusão física do banco de dados
+        await pool.query('DELETE FROM appointments WHERE id = $1', [id]);
 
-        // Buscar configurações do comerciante
-        const merchantRes = await pool.query('SELECT settings FROM merchants WHERE id = $1', [cancelledAppt.merchant_id]);
+        // Buscar configurações do comerciante para o webhook
+        const merchantRes = await pool.query('SELECT settings FROM merchants WHERE id = $1', [apptToDelete.merchant_id]);
         const merchantSettings = merchantRes.rows[0]?.settings;
 
-        // Disparar Webhook com a nova informação inclusive
-        triggerWebhook('appointment_cancelled', cancelledAppt, merchantSettings);
+        // Disparar Webhook de cancelamento/exclusão
+        triggerWebhook('appointment_cancelled', apptToDelete, merchantSettings);
 
-        res.json({ message: 'Agendamento cancelado pelo proprietário', appointment: cancelledAppt });
+        res.json({ message: 'Agendamento excluído permanentemente do banco de dados' });
     } catch (err) {
         console.error(err);
         res.status(500).json({ error: 'Erro no servidor' });

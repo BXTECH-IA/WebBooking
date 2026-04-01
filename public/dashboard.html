@@ -504,7 +504,7 @@
                     return;
                 }
                 list.innerHTML = res.map(c => {
-                    const d = new Date(c.last_appointment);
+                    const lastApptStr = c.last_appointment ? new Date(c.last_appointment).toLocaleDateString('pt-BR') : 'Sem Agendamentos';
                     const bdayStr = c.client_birthday ? new Date(c.client_birthday).toISOString().split('T')[0].split('-').reverse().join('/') : '';
                     const emailStr = c.client_email ? '<br><span style="font-size: 0.85em; color: var(--text-muted);">📧 ' + c.client_email + '</span>' : '';
                     const bdayLine = bdayStr ? '<br><span style="font-size: 0.85em; color: var(--text-muted);">🎂 ' + bdayStr + '</span>' : '';
@@ -518,7 +518,7 @@
                         emailStr +
                         bdayLine +
                         '<div style="margin-top: 5px; font-size: 0.8em; color: var(--text-muted);">' +
-                        c.total_appointments + ' cortes • Último: ' + d.toLocaleDateString('pt-BR') +
+                        c.total_appointments + ' cortes • Último: ' + lastApptStr +
                         '</div>' +
                         '</div>' +
                         '<div>' +

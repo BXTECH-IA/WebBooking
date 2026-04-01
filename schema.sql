@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS services (
 
 CREATE TABLE IF NOT EXISTS client_profiles (
     merchant_id INTEGER REFERENCES merchants(id),
+    name VARCHAR(255),
     phone VARCHAR(50) NOT NULL,
     email VARCHAR(255),
     birthday DATE,

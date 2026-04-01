@@ -13,17 +13,17 @@ router.get('/', async (req, res) => {
     try {
         const query = `
             SELECT 
-                a.client_name, 
-                a.client_phone, 
-                COUNT(*) as total_appointments, 
+                cp.name as client_name, 
+                cp.phone as client_phone, 
+                COUNT(a.id) as total_appointments, 
                 MAX(a.start_time) as last_appointment,
-                MAX(cp.email) as client_email,
-                MAX(cp.birthday) as client_birthday
-            FROM appointments a
-            LEFT JOIN client_profiles cp ON cp.merchant_id = a.merchant_id AND cp.phone = a.client_phone
-            WHERE a.merchant_id = $1
-            GROUP BY a.client_name, a.client_phone
-            ORDER BY last_appointment DESC
+                cp.email as client_email,
+                cp.birthday as client_birthday
+            FROM client_profiles cp
+            LEFT JOIN appointments a ON a.merchant_id = cp.merchant_id AND a.client_phone = cp.phone
+            WHERE cp.merchant_id = $1
+            GROUP BY cp.name, cp.phone, cp.email, cp.birthday
+            ORDER BY last_appointment DESC NULLS LAST
         `;
 
         const result = await pool.query(query, [merchantId]);
