@@ -26,6 +26,23 @@ app.use('/api/merchants', require('./routes/merchants'));
 app.use('/api/clients', require('./routes/clients'));
 app.use('/api/finance', require('./routes/finance'));
 
+// --- MIGRACAO AUTOMATICA NO STARTUP ---
+// Garante que a coluna 'name' exista na tabela client_profiles e popula retroativamente
+const pool = require('./database');
+pool.query('ALTER TABLE client_profiles ADD COLUMN IF NOT EXISTS name VARCHAR(255)')
+    .then(() => {
+        console.log('Migração: Coluna name verificada em client_profiles');
+        return pool.query(`
+            INSERT INTO client_profiles (merchant_id, phone, name)
+            SELECT DISTINCT merchant_id, client_phone, client_name 
+            FROM appointments
+            ON CONFLICT (merchant_id, phone) 
+            DO UPDATE SET name = EXCLUDED.name WHERE client_profiles.name IS NULL OR client_profiles.name = ''
+        `);
+    })
+    .then(() => console.log('Migração: Nomes populados do appointments para os profiles!'))
+    .catch(err => console.error('Migração falhou (ignorando, provavel falta de conexao temporaria):', err));
+
 // Configuração de Upload de Arquivos
 const uploadDir = process.env.VERCEL ? path.join('/tmp', 'uploads') : path.join(__dirname, 'public', 'uploads');
 
