@@ -109,6 +109,22 @@
                 if (!res.ok) return; // silencioso, não atrapalha
                 const m = await res.json();
 
+                // O tema é salvo no registro do comerciante, separado das configurações visuais da página.
+                if (m.theme === 'clean' || m.theme === 'dark') {
+                    const root = document.documentElement;
+                    const themeClasses = ['dark', 'clean', 'light'];
+                    root.classList.remove(...themeClasses);
+                    document.body.classList.remove(...themeClasses);
+
+                    if (m.theme === 'clean') {
+                        root.classList.add('clean', 'light');
+                        document.body.classList.add('clean', 'light');
+                    } else {
+                        root.classList.add('dark');
+                        document.body.classList.add('dark');
+                    }
+                }
+
                 // Nome e Titulo da Aba
                 if (m.username) {
                     const displayName = (m.settings && m.settings.displayName) || m.username;
