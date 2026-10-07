@@ -5,7 +5,28 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebBooking - Login</title>
+    <link rel="icon" type="image/svg+xml" href="assets/webbooking-icon.svg">
     <link rel="stylesheet" href="css/style.css">
+    <style>
+        .login-brand {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 24px;
+        }
+
+        .login-brand img {
+            display: block;
+            width: min(270px, 100%);
+            height: auto;
+        }
+
+        .login-container {
+            min-height: calc(100vh - 60px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
 </head>
 
 <body>
@@ -14,8 +35,11 @@
             localStorage.removeItem('theme');
         } catch (e) {}
     </script>
-    <div class="container" style="height: 100vh; display: flex; align-items: center; justify-content: center;">
+    <main class="container login-container">
         <div class="card" style="width: 100%; max-width: 400px;">
+            <div class="login-brand">
+                <img src="assets/webbooking-logo-dark.svg" alt="WebBooking">
+            </div>
             <h2 style="text-align: center;">Login</h2>
             <form id="loginForm">
                 <div style="margin-bottom: 15px;">
@@ -36,7 +60,9 @@
             <p id="errorMsg" style="color: var(--danger-color); text-align: center; margin-top: 10px; display: none;">
             </p>
         </div>
-    </div>
+    </main>
+
+    <footer class="site-credit">Sistema criado por <strong>Brânios Growth</strong></footer>
 
     <script src="js/app.js"></script>
     <script>
