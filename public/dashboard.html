@@ -65,7 +65,7 @@
             --fc-button-active-bg-color: var(--primary-dark);
             --fc-event-bg-color: var(--primary-color);
             --fc-event-border-color: var(--primary-color);
-            --fc-today-bg-color: rgba(76, 117, 107, 0.08);
+            --fc-today-bg-color: rgba(19, 125, 114, 0.1);
             --fc-list-event-hover-bg-color: var(--hover-bg);
         }
         #fullCalendarContainer {
@@ -627,6 +627,13 @@
                 const values = chartData.map(day => parseFloat(day.total_revenue) || 0);
 
                 const ctx = document.getElementById('financeChartCanvas').getContext('2d');
+                const isCleanTheme = document.body.classList.contains('clean') || document.body.classList.contains('light');
+                const chartStyles = getComputedStyle(document.body);
+                const chartPrimary = chartStyles.getPropertyValue('--primary-color').trim() || '#00ff88';
+                const chartText = chartStyles.getPropertyValue('--text-color').trim() || '#ffffff';
+                const chartMuted = chartStyles.getPropertyValue('--text-muted').trim() || '#aaaaaa';
+                const chartBorder = chartStyles.getPropertyValue('--border-color').trim() || '#333333';
+                const chartSurface = chartStyles.getPropertyValue('--card-bg').trim() || '#1e1e1e';
                 if (financeChartInstance) {
                     financeChartInstance.destroy();
                 }
@@ -638,13 +645,13 @@
                         datasets: [{
                             label: 'Faturamento Diário',
                             data: values,
-                            borderColor: '#00ff88',
-                            backgroundColor: 'rgba(0, 255, 136, 0.15)',
+                            borderColor: chartPrimary,
+                            backgroundColor: isCleanTheme ? 'rgba(19, 125, 114, 0.12)' : 'rgba(0, 255, 136, 0.15)',
                             borderWidth: 3,
                             fill: true,
                             tension: 0.4,
-                            pointBackgroundColor: '#00ff88',
-                            pointBorderColor: '#121212',
+                            pointBackgroundColor: chartPrimary,
+                            pointBorderColor: chartSurface,
                             pointBorderWidth: 2,
                             pointRadius: 4,
                             pointHoverRadius: 6
@@ -660,10 +667,10 @@
                         plugins: {
                             legend: { display: false },
                             tooltip: {
-                                backgroundColor: 'rgba(0, 0, 0, 0.8)',
-                                titleColor: '#fff',
-                                bodyColor: '#00ff88',
-                                borderColor: '#333',
+                                backgroundColor: isCleanTheme ? chartSurface : 'rgba(0, 0, 0, 0.8)',
+                                titleColor: chartText,
+                                bodyColor: chartPrimary,
+                                borderColor: chartBorder,
                                 borderWidth: 1,
                                 callbacks: {
                                     label: function (context) {
@@ -675,12 +682,12 @@
                         scales: {
                             y: {
                                 beginAtZero: true,
-                                grid: { color: 'rgba(255, 255, 255, 0.05)', drawBorder: false },
-                                ticks: { color: '#aaa', callback: function (value) { return 'R$ ' + value; } }
+                                grid: { color: isCleanTheme ? 'rgba(31, 45, 40, 0.1)' : 'rgba(255, 255, 255, 0.05)', drawBorder: false },
+                                ticks: { color: chartMuted, callback: function (value) { return 'R$ ' + value; } }
                             },
                             x: {
                                 grid: { display: false, drawBorder: false },
-                                ticks: { color: '#aaa' }
+                                ticks: { color: chartMuted }
                             }
                         }
                     }
