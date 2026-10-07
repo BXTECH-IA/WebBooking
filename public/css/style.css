@@ -11,6 +11,9 @@
     --hover-bg: #333333;
     --selected-text: #000000;
     --disabled-text: #555555;
+    --card-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    --button-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+    --button-hover-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 }
 
 /* Tema Clean / Claro */
@@ -19,18 +22,21 @@ body.clean,
 body.light,
 html.clean,
 html.light {
-    --primary-color: #0f766e;
-    --primary-dark: #115e59;
-    --bg-color: #f8fafc;
-    --card-bg: #ffffff;
-    --text-color: #1e293b;
-    --text-muted: #64748b;
-    --danger-color: #ef4444;
-    --border-color: #e2e8f0;
-    --input-bg: #ffffff;
-    --hover-bg: #f1f5f9;
+    --primary-color: #4c756b;
+    --primary-dark: #3d635a;
+    --bg-color: #e9ede8;
+    --card-bg: #f1f3ef;
+    --text-color: #2c3833;
+    --text-muted: #66736c;
+    --danger-color: #b85e5e;
+    --border-color: #d5ddd6;
+    --input-bg: #eaeee9;
+    --hover-bg: #e2e8e2;
     --selected-text: #ffffff;
-    --disabled-text: #cbd5e1;
+    --disabled-text: #aeb9b1;
+    --card-shadow: 0 3px 16px rgba(38, 53, 44, 0.1);
+    --button-shadow: 0 2px 7px rgba(38, 53, 44, 0.12);
+    --button-hover-shadow: 0 4px 10px rgba(38, 53, 44, 0.16);
 }
 
 * {
@@ -87,12 +93,12 @@ button {
     cursor: pointer;
     font-weight: bold;
     transition: all 0.2s ease;
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.25);
+    box-shadow: var(--button-shadow);
 }
 
 button:hover {
     background-color: var(--primary-dark);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+    box-shadow: var(--button-hover-shadow);
     transform: translateY(-2px);
 }
 
@@ -157,7 +163,7 @@ select:focus {
     background-color: var(--card-bg);
     padding: 20px;
     border-radius: 16px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--card-shadow);
 }
 
 .hidden {
