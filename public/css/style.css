@@ -13,9 +13,12 @@
     --disabled-text: #555555;
 }
 
-/* Tema Ligth/ Clean */
+/* Tema Clean / Claro */
 
-body.light {
+body.clean,
+body.light,
+html.clean,
+html.light {
     --primary-color: #0f766e;
     --primary-dark: #115e59;
     --bg-color: #f8fafc;

@@ -2,6 +2,7 @@ CREATE TABLE IF NOT EXISTS merchants (
     id SERIAL PRIMARY KEY,
     username VARCHAR(255) UNIQUE NOT NULL,
     password_hash VARCHAR(255) NOT NULL,
+    theme VARCHAR(20) DEFAULT 'clean',
     settings JSONB DEFAULT '{}',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -55,3 +56,14 @@ CREATE TABLE IF NOT EXISTS client_profiles (
     birthday DATE,
     PRIMARY KEY (merchant_id, phone)
 );
+
+CREATE TABLE IF NOT EXISTS merchant_assets (
+    id SERIAL PRIMARY KEY,
+    merchant_id INTEGER REFERENCES merchants(id) ON DELETE CASCADE,
+    asset_key VARCHAR(50) NOT NULL,
+    file_type VARCHAR(100),
+    file_data TEXT,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(merchant_id, asset_key)
+);
+

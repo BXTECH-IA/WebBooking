@@ -10,10 +10,9 @@
 
 <body>
     <script>
-        // Aplica o tema salvo definido no Dashboard
-        if (localStorage.getItem('theme') === 'light') {
-            document.body.classList.add('light');
-        }
+        try {
+            localStorage.removeItem('theme');
+        } catch (e) {}
     </script>
     <div class="container" style="height: 100vh; display: flex; align-items: center; justify-content: center;">
         <div class="card" style="width: 100%; max-width: 400px;">
@@ -57,6 +56,13 @@
                 } else {
                     localStorage.setItem('merchantId', res.merchantId);
                     localStorage.setItem('merchantName', res.username);
+                    if (res.token) {
+                        localStorage.setItem('authToken', res.token);
+                    }
+                    if (res.theme) {
+                        localStorage.setItem('theme:' + res.merchantId, res.theme);
+                    }
+                    localStorage.removeItem('theme');
                     window.location.href = 'dashboard.html';
                 }
             } catch (err) {

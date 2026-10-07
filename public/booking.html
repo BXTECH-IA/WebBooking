@@ -15,10 +15,9 @@
 
 <body>
     <script>
-        // Aplica o tema salvo (sem precisar carregar o theme.js inteiro)
-        if (localStorage.getItem('theme') === 'light') {
-            document.body.classList.add('light');
-        }
+        try {
+            localStorage.removeItem('theme');
+        } catch (e) {}
     </script>
 
     <div class="profile-section">

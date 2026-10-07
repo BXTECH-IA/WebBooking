@@ -43,6 +43,55 @@ pool.query('ALTER TABLE client_profiles ADD COLUMN IF NOT EXISTS name VARCHAR(25
     .then(() => console.log('Migração: Nomes populados do appointments para os profiles!'))
     .catch(err => console.error('Migração falhou (ignorando, provavel falta de conexao temporaria):', err));
 
+// Garante que a coluna 'theme' exista na tabela merchants com valor default 'clean'
+pool.query("ALTER TABLE merchants ADD COLUMN IF NOT EXISTS theme VARCHAR(20) DEFAULT 'clean'")
+    .then(() => {
+        console.log('Migração: Coluna theme verificada em merchants');
+        return pool.query("UPDATE merchants SET theme = 'clean' WHERE theme IS NULL");
+    })
+    .then(() => console.log('Migração: Tema padrão clean garantido para todos os merchants!'))
+    .catch(err => console.error('Migração de tema em merchants falhou:', err));
+
+// Garante que a tabela 'merchant_assets' exista e que o logo padrão do master seja sincronizado para merchants sem logo
+pool.query(`
+    CREATE TABLE IF NOT EXISTS merchant_assets (
+        id SERIAL PRIMARY KEY,
+        merchant_id INTEGER REFERENCES merchants(id) ON DELETE CASCADE,
+        asset_key VARCHAR(50) NOT NULL,
+        file_type VARCHAR(100),
+        file_data TEXT,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(merchant_id, asset_key)
+    )
+`)
+    .then(() => {
+        console.log('Migração: Tabela merchant_assets verificada');
+        return pool.query(`
+            INSERT INTO merchant_assets (merchant_id, asset_key, file_data, file_type, updated_at)
+            SELECT m.id, 'logo', master_asset.file_data, master_asset.file_type, CURRENT_TIMESTAMP
+            FROM merchants m
+            CROSS JOIN (
+                SELECT file_data, file_type 
+                FROM merchant_assets ma 
+                JOIN merchants m_master ON ma.merchant_id = m_master.id 
+                WHERE LOWER(m_master.username) = 'master' AND ma.asset_key = 'logo'
+                LIMIT 1
+            ) master_asset
+            WHERE LOWER(m.username) != 'master'
+              AND NOT EXISTS (
+                  SELECT 1 FROM merchant_assets existing 
+                  WHERE existing.merchant_id = m.id AND existing.asset_key = 'logo'
+              )
+        `);
+    })
+    .then((res) => {
+        if (res && res.rowCount > 0) {
+            console.log(`Migração: Logo padrão do master sincronizado para ${res.rowCount} comerciante(s).`);
+        }
+    })
+    .catch(err => console.error('Migração de merchant_assets falhou:', err.message));
+
+
 // Configuração de Upload de Arquivos
 const uploadDir = process.env.VERCEL ? path.join('/tmp', 'uploads') : path.join(__dirname, 'public', 'uploads');
 

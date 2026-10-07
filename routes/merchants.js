@@ -4,6 +4,24 @@ const pool = require('../database');
 const multer = require('multer');
 const upload = multer({ storage: multer.memoryStorage() });
 
+// Função auxiliar para obter o comerciante master (ou admin se master não existir)
+async function getMasterMerchant() {
+    try {
+        const masterRes = await pool.query(
+            "SELECT id, username, settings FROM merchants WHERE LOWER(username) = 'master' LIMIT 1"
+        );
+        if (masterRes.rows.length > 0) return masterRes.rows[0];
+        const adminRes = await pool.query(
+            "SELECT id, username, settings FROM merchants WHERE LOWER(username) = 'admin' LIMIT 1"
+        );
+        return adminRes.rows[0] || null;
+    } catch (err) {
+        console.error('Erro ao buscar master merchant:', err);
+        return null;
+    }
+}
+
+
 // Obter todos os comerciantes (Apenas para Painel Admin)
 router.get('/', async (req, res) => {
     try {
@@ -27,15 +45,59 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
+const { authenticateUser } = require('../services/authService');
+
+// Obter tema do usuário autenticado (rota alternativa /api/merchants/theme)
+router.get('/theme', authenticateUser, async (req, res) => {
+    res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+    try {
+        const result = await pool.query('SELECT theme FROM merchants WHERE id = $1', [req.user.userId]);
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Comerciante não encontrado' });
+        res.json({ theme: result.rows[0].theme || 'clean' });
+    } catch (err) {
+        console.error('Erro ao buscar tema', err);
+        res.status(500).json({ error: 'Erro no servidor' });
+    }
+});
+
+// Atualizar tema do usuário autenticado (rota alternativa /api/merchants/theme)
+router.put('/theme', authenticateUser, async (req, res) => {
+    res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+    const { theme } = req.body;
+    if (!theme || (theme !== 'clean' && theme !== 'dark')) {
+        return res.status(400).json({ error: 'Tema inválido. Valores permitidos: "clean" ou "dark".' });
+    }
+    try {
+        const result = await pool.query(
+            'UPDATE merchants SET theme = $1 WHERE id = $2 RETURNING id, username, theme',
+            [theme, req.user.userId]
+        );
+        if (result.rows.length === 0) return res.status(404).json({ error: 'Comerciante não encontrado' });
+        res.json({ message: 'Tema atualizado com sucesso', theme: result.rows[0].theme });
+    } catch (err) {
+        console.error('Erro ao atualizar tema', err);
+        res.status(500).json({ error: 'Erro no servidor' });
+    }
+});
+
 // Obter comerciante por ID (perfil básico)
 router.get('/:id', async (req, res) => {
     const { id } = req.params;
     try {
-        const result = await pool.query('SELECT id, username, settings FROM merchants WHERE id = $1', [id]);
+        const result = await pool.query('SELECT id, username, settings, COALESCE(theme, \'clean\') as theme FROM merchants WHERE id = $1', [id]);
         if (result.rows.length === 0) return res.status(404).json({ error: 'Comerciante não encontrado' });
         const merchant = result.rows[0];
         // Garantir que settings seja JSON parseado
         merchant.settings = merchant.settings || {};
+
+        // Se o comerciante não possuir avatar em settings, usar avatar do master como fallback
+        if (!merchant.settings.avatar && merchant.username && merchant.username.toLowerCase() !== 'master') {
+            const master = await getMasterMerchant();
+            if (master && master.settings && master.settings.avatar) {
+                merchant.settings.avatar = master.settings.avatar;
+            }
+        }
+
         res.json(merchant);
     } catch (err) {
         console.error('Erro ao buscar comerciante', err);
@@ -46,7 +108,8 @@ router.get('/:id', async (req, res) => {
 // Atualizar configurações do comerciante (avatar, frase, endereço, etc)
 router.put('/:id/settings', async (req, res) => {
     const { id } = req.params;
-    const newSettings = req.body;
+    const newSettings = { ...req.body };
+    delete newSettings.theme; // Remove qualquer tentativa de salvar tema globalmente em settings
 
     try {
         // Obter configurações atuais para não sobrescrever tudo
@@ -55,6 +118,7 @@ router.put('/:id/settings', async (req, res) => {
 
         const currentSettings = currentRes.rows[0].settings || {};
         const mergedSettings = { ...currentSettings, ...newSettings };
+        delete mergedSettings.theme;
 
         await pool.query('UPDATE merchants SET settings = $1 WHERE id = $2', [mergedSettings, id]);
         res.json({ message: 'Configurações atualizadas com sucesso', settings: mergedSettings });
@@ -70,10 +134,22 @@ router.put('/:id/settings', async (req, res) => {
 router.get('/:id/assets/:key', async (req, res) => {
     const { id, key } = req.params;
     try {
-        const result = await pool.query(
+        let result = await pool.query(
             'SELECT file_data, file_type FROM merchant_assets WHERE merchant_id = $1 AND asset_key = $2',
             [id, key]
         );
+
+        // Se não encontrar o asset e for o logo, busca o logo padrão do master
+        if (result.rows.length === 0 && key === 'logo') {
+            const master = await getMasterMerchant();
+            if (master) {
+                result = await pool.query(
+                    'SELECT file_data, file_type FROM merchant_assets WHERE merchant_id = $1 AND asset_key = $2',
+                    [master.id, key]
+                );
+            }
+        }
+
         if (result.rows.length === 0) return res.status(404).json({ error: 'Asset não encontrado' });
         res.json(result.rows[0]);
     } catch (err) {
@@ -89,10 +165,22 @@ router.get('/:id/assets/:key/raw', async (req, res) => {
         const mid = parseInt(id);
         if (isNaN(mid)) return res.status(400).json({ error: 'ID de comerciante inválido' });
 
-        const result = await pool.query(
+        let result = await pool.query(
             'SELECT file_data, file_type FROM merchant_assets WHERE merchant_id = $1 AND asset_key = $2',
             [mid, key]
         );
+
+        // Se não encontrar o asset e for o logo, busca o logo padrão do master
+        if (result.rows.length === 0 && key === 'logo') {
+            const master = await getMasterMerchant();
+            if (master) {
+                result = await pool.query(
+                    'SELECT file_data, file_type FROM merchant_assets WHERE merchant_id = $1 AND asset_key = $2',
+                    [master.id, key]
+                );
+            }
+        }
+
         if (result.rows.length === 0) return res.status(404).json({ error: 'Asset não encontrado' });
 
         const asset = result.rows[0];

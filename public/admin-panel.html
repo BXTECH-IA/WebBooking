@@ -50,7 +50,9 @@
 </head>
 <body>
     <script>
-        if (localStorage.getItem('theme') === 'light') document.body.classList.add('light');
+        try {
+            localStorage.removeItem('theme');
+        } catch (e) {}
     </script>
     
     <div class="container" style="max-width: 1000px;">
